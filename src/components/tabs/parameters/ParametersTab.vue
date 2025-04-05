@@ -76,9 +76,8 @@ async function getParameters(node: RosNode) {
 			<select
 				id="node"
 				@change="
-					selectedNode = parseInt(
-						($event.target as HTMLOptionElement).value,
-					)
+					selectedNode = ($event.target as HTMLSelectElement)
+						.selectedIndex
 				"
 			>
 				<option v-for="(node, i) in nodes" :value="i">
@@ -88,7 +87,10 @@ async function getParameters(node: RosNode) {
 			<button @click="getNodes">Refresh</button>
 		</div>
 		<div class="params">
-			<template v-for="p in parameters">
+			<template
+				v-for="p in parameters"
+				:key="nodes[selectedNode].getName() + ':' + p.getName()"
+			>
 				<label class="param-name" for="name">{{ p.getName() }}</label>
 				<span class="param-value"
 					><ParameterInput :param="p as RosParam" :id="p.getName()"

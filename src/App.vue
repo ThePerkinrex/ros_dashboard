@@ -7,6 +7,7 @@ import ParametersTabTitle from './components/tabs/parameters/ParametersTabTitle.
 import ParametersTab from './components/tabs/parameters/ParametersTab.vue'
 import PlotsTabTitle from './components/tabs/plots/PlotsTabTitle.vue'
 import PlotsTab from './components/tabs/plots/PlotsTab.vue'
+import EmergencyBrake from './components/EmergencyBrake.vue'
 
 const ros = new Ros()
 
@@ -19,9 +20,12 @@ watch(url, ros.setURL)
 <template>
 	<div class="main">
 		<header>
-			<label for="ros-url">ROS URL: </label>
-			<input type="url" v-model="url" id="ros-url" />
-			<ConnectionStatusImage :connection-status="connection_status" />
+			<div class="connection">
+				<label for="ros-url">ROS URL: </label>
+				<input type="url" v-model="url" id="ros-url" />
+				<ConnectionStatusImage :connection-status="connection_status" />
+			</div>
+			<EmergencyBrake />
 		</header>
 
 		<main>
@@ -39,6 +43,14 @@ watch(url, ros.setURL)
 header {
 	border-bottom: 2px solid black;
 	padding: 1rem;
+	display: flex;
+	flex-direction: row;
+	gap: 1em;
+}
+.connection {
+	display: flex;
+	flex-direction: row;
+	gap: 0.5em;
 }
 
 .main {

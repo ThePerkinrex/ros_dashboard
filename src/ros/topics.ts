@@ -20,10 +20,6 @@ const PLOTTABLE_TYPES: PlottableMapping = {
 	'std_msgs/msg/Bool': (x) => (x.data ? 1 : 0),
 }
 
-export interface RosTopicPlotSubscriber {
-	consumeData(data: number): void
-}
-
 export class RosTopic {
 	private name: string
 	private type: string
@@ -45,23 +41,30 @@ export class RosTopic {
 		return mapping[this.getType()] !== undefined
 	}
 
-	public subscribePlot(
-		s: RosTopicPlotSubscriber,
-		mapping: PlottableMapping = PLOTTABLE_TYPES,
-	): Topic {
-		if (mapping[this.getType()] === undefined)
-			throw new Error(
-				'Unable to subscribe to a topic of type ' + this.getType(),
-			)
+	public subscribe(s: (m: any) => void): Topic {
 		const t = new Topic({
 			ros: ros_singleton,
 			name: this.getName(),
 			messageType: this.getType(),
 		})
 		t.subscribe((m) => {
-			console.log(m)
+			s(m)
 		})
 		return t
+	}
+
+	public subscribePlot(
+		s: (data: number) => void,
+		mapping: PlottableMapping = PLOTTABLE_TYPES,
+	): Topic {
+		const map_fn = mapping[this.getType()]
+		if (map_fn === undefined)
+			throw new Error(
+				'Unable to subscribe to a topic of type ' + this.getType(),
+			)
+		return this.subscribe((m) => {
+			s(map_fn(m))
+		})
 	}
 
 	public unsubscribe(t: Topic) {

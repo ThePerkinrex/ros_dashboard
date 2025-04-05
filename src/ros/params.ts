@@ -68,7 +68,7 @@ function getValueMsg<K extends keyof typeof ParamType>(
 			msg.string_value = v
 			break
 		default:
-			throw new Error('Unsupported type')
+			throw new Error('Unsupported type: ' + type)
 	}
 	return msg
 }

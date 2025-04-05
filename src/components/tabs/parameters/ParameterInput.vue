@@ -7,6 +7,7 @@ const props = defineProps<{id: string, param: RosParam}>()
 const values = reactive({bool: false, string: '', num: 0.0})
 
 async function loadValue(p: RosParam) {
+	console.log('Loading value for ', p)
 	if (p.isBoolean()) {
 		values.bool = await p.getValue()
 	}else if (p.isDouble()) {
@@ -20,8 +21,7 @@ async function loadValue(p: RosParam) {
 	}
 }
 
-watch(props.param, loadValue)
-loadValue(props.param)
+watch(props.param, loadValue, {immediate: true})
 </script>
 
 <template>

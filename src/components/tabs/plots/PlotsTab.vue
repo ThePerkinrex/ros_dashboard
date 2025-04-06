@@ -2,37 +2,17 @@
 import { connection_status, ConnectionStatus, Ros } from '@/ros/ros'
 import { reactive, ref, shallowRef, watch } from 'vue'
 import type { RosParam } from '@/ros/params'
-import { Line } from 'vue-chartjs'
-import type { ChartData, ChartOptions } from 'chart.js'
-import {
-	Chart as ChartJS,
-	Title,
-	Tooltip,
-	Legend,
-	LineElement,
-	PointElement,
-	CategoryScale,
-	LinearScale,
-	TimeScale,
-} from 'chart.js'
-import 'chartjs-adapter-date-fns'
+
 import type { RosTopic } from '@/ros/topics'
 import type { Topic } from 'roslib'
-import type { ShallowRefMarker } from '@vue/reactivity'
+import { computed, type ShallowRefMarker } from '@vue/reactivity'
+import type { PlotDatasets } from '@/components/util/TimeSeries.vue'
+import TimeSeries from '@/components/util/TimeSeries.vue'
 
-// Register the necessary Chart.js components
-ChartJS.register(
-	Title,
-	Tooltip,
-	Legend,
-	LineElement,
-	PointElement,
-	CategoryScale,
-	LinearScale,
-	TimeScale,
-)
-
-type TopicData = { a: RosTopic; b: { s: Topic; i: number } | null }
+type TopicData = {
+	rosTopic: RosTopic
+	subscription: { subscribed: Topic } | null
+}
 
 const ros = new Ros()
 const topics = ref<TopicData[]>([])
@@ -43,57 +23,94 @@ watch(
 		if (c === ConnectionStatus.CONNECTED) {
 			topics.value = (await ros.getTopics())
 				.filter((t) => t.isPlottable())
-				.map((t) => ({ a: t, b: null }))
+				.map((t) => ({ rosTopic: t, subscription: null }))
 		}
 	},
 	{ immediate: true },
 )
 
-const data = ref<ChartData<'line'>>({
-	datasets: [
-		{
-			data: [
-				{ x: 1, y: 0 },
-				{ x: 2, y: 1 },
-				{ x: 4, y: 0.5 },
-			],
-			label: 'Data 1',
-		},
-		{
-			data: [
-				{ x: 2, y: 0 },
-				{ x: 3, y: 1 },
-				{ x: 4.5, y: 0.5 },
-			],
-			label: 'Data 2',
-		},
-	],
-})
+const datasets = ref<PlotDatasets>({})
 
-const options: ChartOptions<'line'> = {
-	scales: {
-		x: {
-			type: 'time',
-		},
-	},
+// const data = computed<ChartData<'line'>>(() => {
+// 	const d: ChartData<'line'> = {
+// 		datasets: Object.getOwnPropertySymbols(datasets.value).map(
+// 			(x) => datasets.value[x],
+// 		),
+// 	}
+// 	console.log('Compute data: ', d, datasets.value)
+// 	return d
+// })
+
+// const options: ChartOptions<'line'> = {
+// 	scales: {
+// 		x: {
+// 			type: 'time',
+// 			ticks: {
+// 				// minRotation: 0,
+// 				// maxRotation: 0,
+// 				// sampleSize: 3,
+// 				// maxTicksLimit: 5,
+// 				display: false,
+// 			},
+// 		},
+// 	},
+// 	plugins: {
+// 		colors: {
+// 			forceOverride: true,
+// 		},
+// 	},
+// 	borderColor: '#FFFFFF',
+// 	backgroundColor: '#DDDDDD',
+// 	animation: false,
+// 	normalized: true,
+// 	spanGaps: true,
+// 	elements: {
+// 		point: {
+// 			radius: 0,
+// 		},
+// 	},
+// }
+
+function toggleDataset(t: TopicData) {
+	console.log('toggle')
+	if (t.subscription === null) {
+		const id = t.rosTopic.getName()
+		datasets.value[id] = {
+			data: [],
+		}
+		t.subscription = {
+			subscribed: t.rosTopic.subscribePlot((data) => {
+				datasets.value[id].data.push({ x: Date.now() / 1000, y: data })
+			}),
+		}
+	} else {
+		delete datasets.value[t.rosTopic.getName()]
+		t.rosTopic.unsubscribe(t.subscription.subscribed)
+		t.subscription = null
+	}
 }
-
-setTimeout(() => {
-	data.value.datasets[1].data.push({ x: 5.5, y: 0.5 })
-}, 1000)
-
-function addDataset(t: TopicData) {}
 </script>
 
 <template>
 	<div class="content">
 		<aside>
-			<div class="topic" v-for="topic in topics">
-				{{ topic.a.getName() + ' - ' + topic.a.getType() }}
+			<div
+				class="topic"
+				v-for="topic in topics"
+				:key="topic.rosTopic.getName()"
+			>
+				<input
+					type="checkbox"
+					:id="topic.rosTopic.getName()"
+					@change="toggleDataset(topic as TopicData)"
+				/>
+				<label :for="topic.rosTopic.getName()">{{
+					topic.rosTopic.getName()
+				}}</label>
 			</div>
 		</aside>
 		<div class="main">
-			<Line :data="JSON.parse(JSON.stringify(data))" :options="options" />
+			<TimeSeries :datasets="datasets" />
 		</div>
 	</div>
 </template>

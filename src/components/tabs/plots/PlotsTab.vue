@@ -8,6 +8,7 @@ import type { Topic } from 'roslib'
 import { computed, type ShallowRefMarker } from '@vue/reactivity'
 import type { PlotDatasets } from '@/components/util/TimeSeries.vue'
 import TimeSeries from '@/components/util/TimeSeries.vue'
+import { CircularBuffer } from '@/util'
 
 type TopicData = {
 	rosTopic: RosTopic
@@ -29,7 +30,7 @@ watch(
 	{ immediate: true },
 )
 
-const datasets = ref<PlotDatasets>({})
+const datasets: PlotDatasets = {}
 
 // const data = computed<ChartData<'line'>>(() => {
 // 	const d: ChartData<'line'> = {
@@ -71,20 +72,40 @@ const datasets = ref<PlotDatasets>({})
 // 	},
 // }
 
+const plot = ref<{ update: (datasets: PlotDatasets) => void } | null>(null)
+
+let colorI = 0
+const COLORS = [
+	'rgb(128,0,0)',
+	'rgb(0,128,0)',
+	'rgb(0,0,128)',
+	'rgb(128,128,0)',
+	'rgb(128,0,128)',
+	'rgb(0,128,128)',
+]
+
+function getColor(): string {
+	return COLORS[(colorI++ + COLORS.length) % COLORS.length]
+}
+
 function toggleDataset(t: TopicData) {
-	console.log('toggle')
+	console.log('toggle', t.rosTopic.getName())
 	if (t.subscription === null) {
+		const color = getColor()
+		console.log('Adding', color)
 		const id = t.rosTopic.getName()
-		datasets.value[id] = {
-			data: [],
+		datasets[id] = {
+			data: new CircularBuffer(),
+			color: color,
 		}
 		t.subscription = {
 			subscribed: t.rosTopic.subscribePlot((data) => {
-				datasets.value[id].data.push({ x: Date.now() / 1000, y: data })
+				datasets[id].data.push({ x: Date.now() / 1000, y: data })
+				if (plot.value !== null) plot.value.update(datasets)
 			}),
 		}
 	} else {
-		delete datasets.value[t.rosTopic.getName()]
+		delete datasets[t.rosTopic.getName()]
 		t.rosTopic.unsubscribe(t.subscription.subscribed)
 		t.subscription = null
 	}
@@ -110,7 +131,7 @@ function toggleDataset(t: TopicData) {
 			</div>
 		</aside>
 		<div class="main">
-			<TimeSeries :datasets="datasets" />
+			<TimeSeries ref="plot" />
 		</div>
 	</div>
 </template>

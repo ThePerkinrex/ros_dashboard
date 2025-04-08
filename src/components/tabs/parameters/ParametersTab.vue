@@ -34,6 +34,8 @@ watch(selectedNode, (s) => {
 })
 
 async function getParameters(node: RosNode) {
+	console.log('Refreshing params')
+	parameters.value = []
 	parameters.value = await node.getParams()
 }
 
@@ -70,7 +72,7 @@ async function getParameters(node: RosNode) {
 </script>
 
 <template>
-	<div class="content">
+	<div class="main">
 		<div class="header">
 			<label for="node">Node: </label>
 			<select
@@ -80,11 +82,21 @@ async function getParameters(node: RosNode) {
 						.selectedIndex
 				"
 			>
-				<option v-for="(node, i) in nodes" :value="i">
+				<option
+					v-for="(node, i) in nodes"
+					:value="i"
+					:key="node.getName()"
+				>
 					{{ node.getName() }}
 				</option>
 			</select>
 			<button @click="getNodes">Refresh</button>
+			<button
+				@click="getParameters(nodes[selectedNode] as RosNode)"
+				v-if="nodes.length > 0"
+			>
+				Refresh Values
+			</button>
 		</div>
 		<div class="params">
 			<template
@@ -101,7 +113,7 @@ async function getParameters(node: RosNode) {
 </template>
 
 <style scoped>
-.content {
+.main {
 	padding: 2rem;
 }
 

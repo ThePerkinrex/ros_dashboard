@@ -3,7 +3,7 @@ import { connection_status, ConnectionStatus } from '@/ros/ros'
 import { RosService } from '@/ros/service'
 import type { CircularBuffer } from '@/util'
 import { computed, onMounted, ref, watch } from 'vue'
-import Graph, { type ExposedGraph, type GraphDataset } from './graph/Graph.vue'
+import Graph, { type ExposedGraph, type GraphDataset } from './Graph.vue'
 
 const COLOR_NON_SIGNIFICANT = 'rgb(30,30,30)'
 const COLOR_SIGNIFICANT = 'rgb(50,50,50)'
@@ -267,7 +267,7 @@ function getYTicks(
 ): { ticks: TickMark[]; longestTickTextWidth: number } {
 	// Determine the order of magnitude for the overall range.
 	const msd = Math.floor(Math.log10(diffY))
-	const dec_digits = Math.max(0, -msd)
+	const dec_digits = Math.min(Math.max(0, -msd), 10)
 	// console.log(diffY, msd, dec_digits)
 	// The minor tick spacing is one order of magnitude smaller.
 	const sd = msd - 1

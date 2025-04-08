@@ -8,13 +8,13 @@ import ParametersTab from './components/tabs/parameters/ParametersTab.vue'
 import PlotsTabTitle from './components/tabs/plots/PlotsTabTitle.vue'
 import PlotsTab from './components/tabs/plots/PlotsTab.vue'
 import EmergencyBrake from './components/EmergencyBrake.vue'
+import PolarPlotsTabTitle from './components/tabs/polarPlots/PolarPlotsTabTitle.vue'
+import PolarPlotsTab from './components/tabs/polarPlots/PolarPlotsTab.vue'
 
 const ros = new Ros()
 
 const url = ref('ws://localhost:9090')
 ros.setURL(url.value)
-
-watch(url, ros.setURL)
 </script>
 
 <template>
@@ -23,6 +23,7 @@ watch(url, ros.setURL)
 			<div class="connection">
 				<label for="ros-url">ROS URL: </label>
 				<input type="url" v-model="url" id="ros-url" />
+				<button @click="ros.setURL(url)">Connect</button>
 				<ConnectionStatusImage :connection-status="connection_status" />
 			</div>
 			<EmergencyBrake />
@@ -33,6 +34,7 @@ watch(url, ros.setURL)
 				:tabs="[
 					{ title: ParametersTabTitle, content: ParametersTab },
 					{ title: PlotsTabTitle, content: PlotsTab },
+					{ title: PolarPlotsTabTitle, content: PolarPlotsTab },
 				]"
 			/>
 		</main>

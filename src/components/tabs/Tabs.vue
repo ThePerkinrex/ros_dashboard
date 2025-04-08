@@ -24,8 +24,11 @@ const { tabs } = defineProps<{ tabs: ArrayOneOrMore<Tab> }>()
 				<component :is="tab.title"></component>
 			</div>
 		</aside>
-		<div class="content">
-			<component :is="tabs[selectedTab].content" class="tab"></component>
+		<div
+			:class="['content', { active: selectedTab === i }]"
+			v-for="(tab, i) in tabs"
+		>
+			<component :is="tab.content" class="tab"></component>
 		</div>
 	</div>
 </template>
@@ -41,8 +44,13 @@ const { tabs } = defineProps<{ tabs: ArrayOneOrMore<Tab> }>()
 	height: 100%;
 }
 
-.content {
+.content.active {
 	flex-grow: 1;
+	display: block;
+}
+
+.content {
+	display: none;
 }
 
 aside {

@@ -1,24 +1,28 @@
 <script setup lang="ts">
 import type { RosParam } from '@/ros/params';
-import { reactive, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
 
 const props = defineProps<{id: string, param: RosParam}>()
 
-const values = reactive({bool: false, string: '', num: 0.0})
+const CLEAR_VALUE = {bool: false, string: '', num: 0.0}
+const values = ref(CLEAR_VALUE)
 
 async function loadValue(p: RosParam) {
-	console.log('Loading value for ', p)
+	console.log(' + Loading value for ', p.getName())
+	let new_values = {bool: false, string: '', num: 0.0}
 	if (p.isBoolean()) {
-		values.bool = await p.getValue()
+		new_values.bool = await p.getValue()
 	}else if (p.isDouble()) {
-		values.num = await p.getValue()
+		new_values.num = await p.getValue()
 	}else if (p.isInteger()) {
-		values.num = await p.getValue()
+		new_values.num = await p.getValue()
 	}else if (p.isString()) {
-		values.string = await p.getValue()
+		new_values.string = await p.getValue()
 	}else {
-		values.string = (await p.getValue()) + ''
+		new_values.string = (await p.getValue()) + ''
 	}
+	values.value = new_values
+	console.log(' > Loading value for ', p.getName(), new_values, props.param)
 }
 
 watch(props.param, loadValue, {immediate: true})

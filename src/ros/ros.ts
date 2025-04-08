@@ -81,32 +81,36 @@ export class RosNode {
 			serviceType: 'rcl_interfaces/srv/DescribeParameters',
 		})
 
-		return new Promise((resolve) => {
+		return new Promise((resolve, reject) => {
 			listParameters.callService({ prefixes: [], depth: 0 }, (r) => {
 				const names = r.result.names
-				parameterTypes.callService({ names }, (r) => {
-					resolve(
-						r.descriptors.map(
-							(d: {
-								name: string
-								type: number
-								description?: string
-							}) => {
-								let t: ParamType =
-									d.type >= ParamType.NOT_SET &&
-									d.type <= ParamType.STRING_ARRAY
-										? d.type
-										: ParamType.UNKNOWN
-								return new RosParam(
-									this,
-									d.name,
-									d.description,
-									t,
-								)
-							},
-						),
-					)
-				})
+				parameterTypes.callService(
+					{ names },
+					(r) => {
+						resolve(
+							r.descriptors.map(
+								(d: {
+									name: string
+									type: number
+									description?: string
+								}) => {
+									let t: ParamType =
+										d.type >= ParamType.NOT_SET &&
+										d.type <= ParamType.STRING_ARRAY
+											? d.type
+											: ParamType.UNKNOWN
+									return new RosParam(
+										this,
+										d.name,
+										d.description,
+										t,
+									)
+								},
+							),
+						)
+					},
+					reject,
+				)
 			})
 		})
 	}

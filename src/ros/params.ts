@@ -32,7 +32,8 @@ function getValue<K extends keyof typeof ParamType>(
 	type: (typeof ParamType)[K],
 	msg: ParameterValueMsg,
 ): RosParamValueMap[K] {
-	if (type !== msg.type) {
+	if (msg.type === undefined) console.log(msg)
+	if (type !== msg.type && msg.type !== undefined) {
 		throw new Error(`Unexpected type: ${msg.type}, but expected ${type}`)
 	}
 	switch (type) {
@@ -135,18 +136,54 @@ export class RosParam<
 		return this.type == ParamType.STRING
 	}
 
-	public async getValue(): Promise<RosParamValueMap[Type]> {
+	private async getValueInternal(
+		retries: number,
+		timeout: number,
+	): Promise<ParameterValueMsg> {
 		const getParameters = new Service({
 			ros: ros_singleton,
 			name: this.node.getName() + '/get_parameters',
 			serviceType: 'rcl_interfaces/srv/GetParameters',
 		})
-		let msg: ParameterValueMsg = await new Promise((resolve) => {
-			getParameters.callService({ names: [this.getName()] }, (r) => {
-				resolve(r.values[0])
-			})
+		let msg: ParameterValueMsg = await new Promise((resolve, reject) => {
+			const t = setTimeout(
+				() => {
+					if (retries > 0) {
+						console.log('Retrying ' + this.getName())
+						this.getValueInternal(retries - 1, timeout)
+							.then(resolve)
+							.catch(reject)
+					} else {
+						reject(new Error('Timeout for ' + this.getName()))
+					}
+				},
+				timeout + Math.random() * 50,
+			)
+			getParameters.callService(
+				{ names: [this.getName()] },
+				(r) => {
+					clearTimeout(t)
+					console.log('resolved', this.getName(), r.values[0])
+					resolve(r.values[0])
+				},
+				(e) => {
+					clearTimeout(t)
+					console.log('error', this.getName(), e)
+					reject(e)
+				},
+			)
 		})
-		return getValue(this.getType(), msg)
+		return msg
+	}
+
+	public async getValue(
+		retries = 3,
+		timeout = 500,
+	): Promise<RosParamValueMap[Type]> {
+		return getValue(
+			this.getType(),
+			await this.getValueInternal(retries, timeout),
+		)
 	}
 
 	public async setValue(v: RosParamValueMap[Type]): Promise<void> {
@@ -155,7 +192,7 @@ export class RosParam<
 			name: this.node.getName() + '/set_parameters',
 			serviceType: 'rcl_interfaces/srv/SetParameters',
 		})
-		await new Promise((resolve) => {
+		await new Promise((resolve, reject) => {
 			getParameters.callService(
 				{
 					parameters: [
@@ -169,6 +206,7 @@ export class RosParam<
 					console.log(this.getName(), r)
 					resolve(undefined)
 				},
+				reject,
 			)
 		})
 	}

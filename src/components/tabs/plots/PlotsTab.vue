@@ -1,152 +1,43 @@
 <script setup lang="ts">
-import { connection_status, ConnectionStatus, Ros } from '@/ros/ros'
-import { reactive, ref, shallowRef, watch } from 'vue'
-import type { RosParam } from '@/ros/params'
+import { ref } from 'vue'
+import Plot from './Plot.vue'
+import { cssColors } from '@/util/color'
 
-import type { RosTopic } from '@/ros/topics'
-import type { Topic } from 'roslib'
-import { computed, type ShallowRefMarker } from '@vue/reactivity'
-import type { PlotDatasets } from '@/components/util/TimeSeries.vue'
-import TimeSeries from '@/components/util/TimeSeries.vue'
-import { CircularBuffer } from '@/util'
-
-type TopicData = {
-	rosTopic: RosTopic
-	subscription: { subscribed: Topic } | null
-}
-
-const ros = new Ros()
-const topics = ref<TopicData[]>([])
-
-watch(
-	connection_status,
-	async (c) => {
-		if (c === ConnectionStatus.CONNECTED) {
-			topics.value = (await ros.getTopics())
-				.filter((t) => t.isPlottable())
-				.map((t) => ({ rosTopic: t, subscription: null }))
-		}
-	},
-	{ immediate: true },
-)
-
-const datasets: PlotDatasets = {}
-
-// const data = computed<ChartData<'line'>>(() => {
-// 	const d: ChartData<'line'> = {
-// 		datasets: Object.getOwnPropertySymbols(datasets.value).map(
-// 			(x) => datasets.value[x],
-// 		),
-// 	}
-// 	console.log('Compute data: ', d, datasets.value)
-// 	return d
-// })
-
-// const options: ChartOptions<'line'> = {
-// 	scales: {
-// 		x: {
-// 			type: 'time',
-// 			ticks: {
-// 				// minRotation: 0,
-// 				// maxRotation: 0,
-// 				// sampleSize: 3,
-// 				// maxTicksLimit: 5,
-// 				display: false,
-// 			},
-// 		},
-// 	},
-// 	plugins: {
-// 		colors: {
-// 			forceOverride: true,
-// 		},
-// 	},
-// 	borderColor: '#FFFFFF',
-// 	backgroundColor: '#DDDDDD',
-// 	animation: false,
-// 	normalized: true,
-// 	spanGaps: true,
-// 	elements: {
-// 		point: {
-// 			radius: 0,
-// 		},
-// 	},
-// }
-
-const plot = ref<{ update: (datasets: PlotDatasets) => void } | null>(null)
-
-let colorI = 0
-const COLORS = [
-	'rgb(128,0,0)',
-	'rgb(0,128,0)',
-	'rgb(0,0,128)',
-	'rgb(128,128,0)',
-	'rgb(128,0,128)',
-	'rgb(0,128,128)',
-]
-
-function getColor(): string {
-	return COLORS[(colorI++ + COLORS.length) % COLORS.length]
-}
-
-function toggleDataset(t: TopicData) {
-	console.log('toggle', t.rosTopic.getName())
-	if (t.subscription === null) {
-		const color = getColor()
-		console.log('Adding', color)
-		const id = t.rosTopic.getName()
-		datasets[id] = {
-			data: new CircularBuffer(),
-			color: color,
-		}
-		t.subscription = {
-			subscribed: t.rosTopic.subscribePlot((data) => {
-				datasets[id].data.push({ x: Date.now() / 1000, y: data })
-				if (plot.value !== null) plot.value.update(datasets)
-			}),
-		}
-	} else {
-		delete datasets[t.rosTopic.getName()]
-		t.rosTopic.unsubscribe(t.subscription.subscribed)
-		t.subscription = null
-	}
-}
+const plots = ref([Symbol()])
+const colorGen = cssColors()
 </script>
 
 <template>
 	<div class="content">
-		<aside>
-			<div
-				class="topic"
-				v-for="topic in topics"
-				:key="topic.rosTopic.getName()"
-			>
-				<input
-					type="checkbox"
-					:id="topic.rosTopic.getName()"
-					@change="toggleDataset(topic as TopicData)"
-				/>
-				<label :for="topic.rosTopic.getName()">{{
-					topic.rosTopic.getName()
-				}}</label>
-			</div>
-		</aside>
-		<div class="main">
-			<TimeSeries ref="plot" />
+		<div v-for="k in plots" :key="k" class="plot">
+			<Plot :color-generator="colorGen">
+				<button
+					@click="plots.splice(plots.indexOf(k), 1)"
+					:disabled="plots.length <= 1"
+					class="remove"
+				>
+					Remove
+				</button>
+			</Plot>
 		</div>
+		<button @click="plots.push(Symbol())" class="add">Add</button>
 	</div>
 </template>
 
 <style scoped>
-.main,
-aside {
-	padding: 1rem;
-}
 .content {
 	display: flex;
 	flex-direction: row;
-	gap: 1em;
+	flex-wrap: wrap;
+	justify-content: center;
 }
-.main {
-	flex-grow: 1;
+
+.remove {
+	align-self: center;
+}
+
+.add {
+	height: fit-content;
+	margin: 2em;
 }
 </style>

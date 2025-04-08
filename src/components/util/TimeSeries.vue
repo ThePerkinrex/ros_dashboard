@@ -3,6 +3,7 @@ import { connection_status, ConnectionStatus } from '@/ros/ros'
 import { RosService } from '@/ros/service'
 import type { CircularBuffer } from '@/util'
 import { computed, onMounted, ref, watch } from 'vue'
+import Graph, { type ExposedGraph, type GraphDataset } from './graph/Graph.vue'
 
 const COLOR_NON_SIGNIFICANT = 'rgb(30,30,30)'
 const COLOR_SIGNIFICANT = 'rgb(50,50,50)'
@@ -20,9 +21,11 @@ export type PlotDataset = {
 	color: string
 }
 
-export type PlotDatasets = {
+type ExtendedPlotDataset = PlotDataset & GraphDataset
+
+export type PlotDatasets<D extends PlotDataset = PlotDataset> = {
 	//% Each timeseries should be ordered
-	[name: string]: PlotDataset
+	[name: string]: D
 }
 
 export type PlotData = {
@@ -33,66 +36,60 @@ export type PlotData = {
 
 const props = defineProps<PlotData>()
 
-const canvas = ref<HTMLCanvasElement | null>(null)
+const graph = ref<ExposedGraph<ExtendedPlotDataset> | null>(null)
 
 const timeLength = computed(() => {
 	return props.timeLength ?? 5.0
 })
 
 const marginLeft = ref<number>(0)
+const legendStyle = computed(() => ({ left: `${marginLeft}px` }))
 
-type LegendItem = { name: string; color: string }
+let preparedData = {
+	latestX: 0,
+	maxY: -Infinity,
+	minY: Infinity,
+	minX: 0,
+	map: (p: Point): Point => p,
+}
 
-const legend = ref<LegendItem[]>([])
-
-const update = (datasets: PlotDatasets) => {
-	const c = canvas.value
-	const datasetsLength = Object.keys(datasets).length
-	if (c === null || datasetsLength === 0) return
-	const ctx = c.getContext('2d')
-	if (ctx === null) return
-
-	const newLegend = new Array<LegendItem>(datasetsLength)
-
+const prepare = (ctx: CanvasRenderingContext2D) => {
 	ctx.textBaseline = 'middle'
 	ctx.font = '12px sans-serif'
-
-	let latestX = 0
-	let maxY = -Infinity
-	let minY = Infinity
-	let legendI = 0
-	for (const name in datasets) {
-		const dataset = datasets[name]
-		newLegend[legendI++] = { name, color: dataset.color }
-		if (dataset.data.size() === 0) continue
-		const latestInDataset = dataset.data.get(dataset.data.size() - 1)
-		if (latestInDataset.x > latestX) latestX = latestInDataset.x
-		for (let i = dataset.data.size() - 1; i >= 0; i--) {
-			const p = dataset.data.get(i)
-			if (p.y < minY) minY = p.y
-			else if (p.y > maxY) maxY = p.y
-		}
+	preparedData = {
+		latestX: 0,
+		maxY: -Infinity,
+		minY: Infinity,
+		minX: 0,
+		map: (p: Point): Point => p,
 	}
+}
 
-	newLegend.sort((a, b) => a.name.localeCompare(b.name))
-	if (!compareLegends(legend.value, newLegend)) {
-		legend.value = newLegend // Only update if they're really different
+const prepareDataset = (name: string, dataset: ExtendedPlotDataset) => {
+	const latestInDataset = dataset.data.get(dataset.data.size() - 1)
+	if (latestInDataset.x > preparedData.latestX)
+		preparedData.latestX = latestInDataset.x
+	for (let i = dataset.data.size() - 1; i >= 0; i--) {
+		const p = dataset.data.get(i)
+		if (p.y < preparedData.minY) preparedData.minY = p.y
+		else if (p.y > preparedData.maxY) preparedData.maxY = p.y
 	}
+}
 
-	if (maxY === -Infinity) return
-
-	let diffY = maxY - minY
+const drawBackground = (ctx: CanvasRenderingContext2D) => {
+	let diffY = preparedData.maxY - preparedData.minY
 	if (diffY === 0) {
-		maxY = 1.1
-		minY = -0.1
+		preparedData.maxY = 1.1
+		preparedData.minY = -0.1
 		diffY = 1.2
 	} else {
-		maxY += diffY * 0.1
-		minY -= diffY * 0.1
-		diffY = maxY - minY
+		preparedData.maxY += diffY * 0.1
+		preparedData.minY -= diffY * 0.1
+		diffY = preparedData.maxY - preparedData.minY
 	}
-	const yRatio = canvas.value?.height! / diffY
-	const yTicks = getYTicks(diffY, minY, maxY, ctx)
+	const height = graph.value!.height
+	const yRatio = height / diffY
+	const yTicks = getYTicks(diffY, preparedData.minY, preparedData.maxY, ctx)
 
 	const margin = 10
 	const baseX = yTicks.longestTickTextWidth + margin
@@ -101,16 +98,17 @@ const update = (datasets: PlotDatasets) => {
 		marginLeft.value = baseX
 	}
 
-	const minX = latestX - timeLength.value
-	const diffX = latestX - minX
-	const xRatio = (canvas.value?.width! - baseX) / diffX
+	const minX = preparedData.latestX - timeLength.value
+
+	const diffX = preparedData.latestX - minX
+	const xRatio = (graph.value!.width - baseX) / diffX
 
 	const map = (p: Point): Point => ({
 		x: (p.x - minX) * xRatio + baseX,
-		y: canvas.value?.height! - (p.y - minY) * yRatio,
+		y: height - (p.y - preparedData.minY) * yRatio,
 	})
 
-	ctx.clearRect(0, 0, canvas.value!.width, canvas.value!.height)
+	preparedData.minX = minX
 
 	ctx.lineWidth = 1
 	for (const tick of yTicks.ticks) {
@@ -120,7 +118,7 @@ const update = (datasets: PlotDatasets) => {
 		const mapped = map({ x: 0, y: tick.y })
 		ctx.beginPath()
 		ctx.moveTo(baseX, mapped.y)
-		ctx.lineTo(canvas.value?.width!, mapped.y)
+		ctx.lineTo(graph.value!.width, mapped.y)
 		ctx.stroke()
 		if (tick.significant) {
 			ctx.fillStyle = COLOR_TICK_TEXT
@@ -128,28 +126,130 @@ const update = (datasets: PlotDatasets) => {
 		}
 	}
 
-	ctx.lineWidth = 1
-	for (const name in datasets) {
-		const dataset = datasets[name]
-		if (dataset.data.size() === 0) continue
-		const lastMapped = map(dataset.data.get(dataset.data.size() - 1))
+	preparedData.map = map
+}
 
-		ctx.strokeStyle = dataset.color // 'rgb(255, 0, 0)'
-		ctx.beginPath()
-		ctx.moveTo(lastMapped.x, lastMapped.y)
-		// console.log(lastMapped, map(dataset.data[0]))
-		for (let i = dataset.data.size() - 2; i >= 0; i--) {
-			const p = dataset.data.get(i)
-			if (p.x < minX) {
-				// console.log(name, i, p.x, p.y, map(p))
-				dataset.data.removeUpTo(i)
-				break
+const update = (datasets: PlotDatasets) => {
+	const g = graph.value
+	if (g !== null) {
+		const newDatasets: PlotDatasets<ExtendedPlotDataset> = {}
+		for (const name in datasets) {
+			newDatasets[name] = {
+				...datasets[name],
+				*getDataPoints() {
+					for (let i = this.data.size() - 1; i >= 0; i--) {
+						const p = this.data.get(i)
+						if (p.x < preparedData.minX) {
+							// console.log(name, i, p.x, p.y, map(p))
+							this.data.removeUpTo(i)
+							break
+						}
+						yield preparedData.map(p)
+					}
+				},
+				isEmpty() {
+					return this.data.size() === 0
+				},
 			}
-			const mapped = map(p)
-			ctx.lineTo(mapped.x, mapped.y)
 		}
-		ctx.stroke()
+		g.update(newDatasets)
 	}
+
+	// const c = canvas.value
+	// const datasetsLength = Object.keys(datasets).length
+	// if (c === null || datasetsLength === 0) return
+	// const ctx = c.getContext('2d')
+	// if (ctx === null) return
+
+	// for (const name in datasets) {
+	// 	const dataset = datasets[name]
+	// 	newLegend[legendI++] = { name, color: dataset.color }
+	// 	if (dataset.data.size() === 0) continue
+	// 	const latestInDataset = dataset.data.get(dataset.data.size() - 1)
+	// 	if (latestInDataset.x > latestX) latestX = latestInDataset.x
+	// 	for (let i = dataset.data.size() - 1; i >= 0; i--) {
+	// 		const p = dataset.data.get(i)
+	// 		if (p.y < minY) minY = p.y
+	// 		else if (p.y > maxY) maxY = p.y
+	// 	}
+	// }
+
+	// newLegend.sort((a, b) => a.name.localeCompare(b.name))
+	// if (!compareLegends(legend.value, newLegend)) {
+	// 	legend.value = newLegend // Only update if they're really different
+	// }
+
+	// if (maxY === -Infinity) return
+
+	// let diffY = maxY - minY
+	// if (diffY === 0) {
+	// 	maxY = 1.1
+	// 	minY = -0.1
+	// 	diffY = 1.2
+	// } else {
+	// 	maxY += diffY * 0.1
+	// 	minY -= diffY * 0.1
+	// 	diffY = maxY - minY
+	// }
+	// const yRatio = canvas.value?.height! / diffY
+	// const yTicks = getYTicks(diffY, minY, maxY, ctx)
+
+	// const margin = 10
+	// const baseX = yTicks.longestTickTextWidth + margin
+
+	// if (marginLeft.value != baseX) {
+	// 	marginLeft.value = baseX
+	// }
+
+	// const minX = latestX - timeLength.value
+	// const diffX = latestX - minX
+	// const xRatio = (canvas.value?.width! - baseX) / diffX
+
+	// const map = (p: Point): Point => ({
+	// 	x: (p.x - minX) * xRatio + baseX,
+	// 	y: canvas.value?.height! - (p.y - minY) * yRatio,
+	// })
+
+	// ctx.clearRect(0, 0, canvas.value!.width, canvas.value!.height)
+
+	// ctx.lineWidth = 1
+	// for (const tick of yTicks.ticks) {
+	// 	ctx.strokeStyle = tick.significant
+	// 		? COLOR_SIGNIFICANT
+	// 		: COLOR_NON_SIGNIFICANT
+	// 	const mapped = map({ x: 0, y: tick.y })
+	// 	ctx.beginPath()
+	// 	ctx.moveTo(baseX, mapped.y)
+	// 	ctx.lineTo(canvas.value?.width!, mapped.y)
+	// 	ctx.stroke()
+	// 	if (tick.significant) {
+	// 		ctx.fillStyle = COLOR_TICK_TEXT
+	// 		ctx.fillText(tick.text, 5, mapped.y)
+	// 	}
+	// }
+
+	// ctx.lineWidth = 1
+	// for (const name in datasets) {
+	// 	const dataset = datasets[name]
+	// 	if (dataset.data.size() === 0) continue
+	// 	const lastMapped = map(dataset.data.get(dataset.data.size() - 1))
+
+	// 	ctx.strokeStyle = dataset.color // 'rgb(255, 0, 0)'
+	// 	ctx.beginPath()
+	// 	ctx.moveTo(lastMapped.x, lastMapped.y)
+	// 	// console.log(lastMapped, map(dataset.data[0]))
+	// 	for (let i = dataset.data.size() - 2; i >= 0; i--) {
+	// 		const p = dataset.data.get(i)
+	// 		if (p.x < minX) {
+	// 			// console.log(name, i, p.x, p.y, map(p))
+	// 			dataset.data.removeUpTo(i)
+	// 			break
+	// 		}
+	// 		const mapped = map(p)
+	// 		ctx.lineTo(mapped.x, mapped.y)
+	// 	}
+	// 	ctx.stroke()
+	// }
 }
 
 defineExpose({ update })
@@ -168,7 +268,7 @@ function getYTicks(
 	// Determine the order of magnitude for the overall range.
 	const msd = Math.floor(Math.log10(diffY))
 	const dec_digits = Math.max(0, -msd)
-	console.log(diffY, msd, dec_digits)
+	// console.log(diffY, msd, dec_digits)
 	// The minor tick spacing is one order of magnitude smaller.
 	const sd = msd - 1
 
@@ -205,40 +305,18 @@ function getYTicks(
 
 	return { ticks, longestTickTextWidth }
 }
-
-// Assumes they're sorted
-function compareLegends(legend1: LegendItem[], legend2: LegendItem[]): boolean {
-	if (legend1.length != legend2.length) return false
-	for (let i = 0; i < legend1.length; i++) {
-		const i1 = legend1[i]
-		const i2 = legend2[i]
-		if (i1.name != i2.name || i1.color != i2.color) return false
-	}
-	return true
-}
 </script>
 
 <template>
-	<div class="content">
-		<canvas
-			ref="canvas"
-			:width="props.width ?? 600"
-			:height="props.height ?? 400"
-		></canvas>
-		<div
-			class="legend"
-			:style="{ left: `${marginLeft}px` }"
-			v-if="legend.length > 0"
-		>
-			<div class="legend-item" v-for="i in legend">
-				<div
-					class="legend-box"
-					:style="{ backgroundColor: i.color }"
-				></div>
-				<span class="legend-name">{{ i.name }}</span>
-			</div>
-		</div>
-	</div>
+	<Graph
+		:height="props.height"
+		:width="props.width"
+		:legend-style="legendStyle"
+		:draw-background="drawBackground"
+		:prepare="prepare"
+		:prepare-dataset="prepareDataset"
+		ref="graph"
+	/>
 </template>
 
 <style scoped>

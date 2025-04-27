@@ -20,6 +20,7 @@ const colorGenerator = computed(() => props.colorGenerator ?? defaultColorGen)
 
 type TopicData = {
 	rosTopic: RosTopic
+	key: string,
 	subscription: { subscribed: Topic } | null
 }
 
@@ -31,8 +32,8 @@ watch(
 	async (c) => {
 		if (c === ConnectionStatus.CONNECTED) {
 			topics.value = (await ros.getTopics())
-				.filter((t) => t.isPlottable())
-				.map((t) => ({ rosTopic: t, subscription: null }))
+				.flatMap((t) => t.isPlottable().map(key => ({ rosTopic: t, key, subscription: null })))
+				
 		}
 	},
 	{ immediate: true },
@@ -97,7 +98,7 @@ function toggleDataset(t: TopicData) {
 			color: color,
 		}
 		t.subscription = {
-			subscribed: t.rosTopic.subscribePlot((data) => {
+			subscribed: t.rosTopic.subscribePlot(t.key, (data) => {
 				datasets[id].data.push({ x: Date.now() / 1000, y: data })
 				if (plot.value !== null) plot.value.update(datasets)
 			}),
@@ -117,15 +118,15 @@ function toggleDataset(t: TopicData) {
 			<div
 				class="topic"
 				v-for="topic in topics"
-				:key="topic.rosTopic.getName()"
+				:key="topic.rosTopic.getName()+topic.key"
 			>
 				<input
 					type="checkbox"
-					:id="topic.rosTopic.getName()"
+					:id="topic.rosTopic.getName()+topic.key"
 					@change="toggleDataset(topic as TopicData)"
 				/>
-				<label :for="topic.rosTopic.getName()">{{
-					topic.rosTopic.getName()
+				<label :for="topic.rosTopic.getName()+topic.key">{{
+					topic.rosTopic.getName()+'+'+topic.key
 				}}</label>
 			</div>
 		</aside>

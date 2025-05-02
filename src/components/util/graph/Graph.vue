@@ -1,5 +1,7 @@
 <script setup lang="ts" generic="D extends GraphDataset">
 import { computed, ref, type Ref, type StyleValue } from 'vue'
+import playIcon from '@/assets/icons/play.svg'
+import pauseIcon from '@/assets/icons/pause.svg'
 
 export interface GraphPoint {
 	x: number
@@ -40,12 +42,15 @@ type LegendItem = { name: string; color: string }
 
 const legend = ref<LegendItem[]>([])
 
+const paused = ref<boolean>(false)
+
 const update = (datasets: GraphDatasets<D>) => {
 	const c = canvas.value
 	const datasetsLength = Object.keys(datasets).length
 	if (c === null || datasetsLength === 0) return
 	const ctx = c.getContext('2d')
 	if (ctx === null) return
+	if (paused) return
 
 	const newLegend = new Array<LegendItem>(datasetsLength)
 
@@ -106,12 +111,45 @@ function compareLegends(legend1: LegendItem[], legend2: LegendItem[]): boolean {
 	}
 	return true
 }
+
+function togglePlayPause() {
+	paused.value = !paused.value
+}
+
+function save() {
+	const c = canvas.value
+	if (!c) return
+
+	if (c.toBlob) {
+		c.toBlob((blob) => {
+			if (!blob) return
+			const url = URL.createObjectURL(blob)
+			const a = document.createElement('a')
+			a.href = url
+			a.download = `graph-${new Date().toISOString()}.png`
+			document.body.appendChild(a)
+			a.click()
+			document.body.removeChild(a)
+			URL.revokeObjectURL(url)
+		}, 'image/png')
+	} else {
+		const dataURL = c.toDataURL('image/png')
+		const a = document.createElement('a')
+		a.href = dataURL
+		a.download = `graph-${new Date().toISOString()}.png`
+		a.click()
+	}
+}
 </script>
 
 <template>
 	<div class="content">
 		<canvas ref="canvas" :width="width" :height="height"></canvas>
-		<div class="legend" :style="props.legendStyle" v-if="legend.length > 0">
+		<div
+			class="legend overlay"
+			:style="props.legendStyle"
+			v-if="legend.length > 0"
+		>
 			<div class="legend-item" v-for="i in legend">
 				<div
 					class="legend-box"
@@ -119,6 +157,18 @@ function compareLegends(legend1: LegendItem[], legend2: LegendItem[]): boolean {
 				></div>
 				<span class="legend-name">{{ i.name }}</span>
 			</div>
+		</div>
+		<div class="controlbar overlay">
+			<img
+				:src="paused ? playIcon : pauseIcon"
+				class="iconbutton"
+				@click="togglePlayPause"
+			/>
+			<img
+				src="@/assets/icons/save.svg"
+				class="iconbutton"
+				@click="save"
+			/>
 		</div>
 	</div>
 </template>
@@ -131,14 +181,17 @@ function compareLegends(legend1: LegendItem[], legend2: LegendItem[]): boolean {
 	padding: 0.5em;
 }
 
-.legend {
-	position: absolute;
-	top: 0;
-	left: 0;
+.overlay {
 	margin: 0.5em;
 	padding: 0.1em 0.1em;
 	border: 1px solid white;
 	background-color: #fff2;
+}
+
+.legend {
+	position: absolute;
+	top: 0;
+	left: 0;
 	display: flex;
 	flex-direction: column;
 	gap: 0.25em;
@@ -156,5 +209,25 @@ function compareLegends(legend1: LegendItem[], legend2: LegendItem[]): boolean {
 .legend-box {
 	width: 0.7em;
 	height: 0.7em;
+}
+
+.content canvas:hover + .controlbar,
+.content .controlbar:hover {
+	position: absolute;
+	top: 0;
+	right: 0;
+	display: flex;
+	flex-direction: row;
+	gap: 0.25em;
+	align-items: center;
+}
+
+.controlbar {
+	display: none;
+}
+
+.iconbutton {
+	width: 1.8em;
+	padding: 0.2em;
 }
 </style>

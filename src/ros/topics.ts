@@ -2,22 +2,32 @@ import { Topic } from 'roslib'
 import { ros_singleton } from './ros'
 
 export interface PlottableMapping {
-	[name: string]: (x: any) => number
+	[name: string]: Record<string, (x: any) => number>
 }
 
 const PLOTTABLE_TYPES: PlottableMapping = {
-	'std_msgs/msg/Int32': (x) => x.data,
-	'std_msgs/msg/UInt32': (x) => x.data,
-	'std_msgs/msg/Int64	': (x) => x.data,
-	'std_msgs/msg/UInt64': (x) => x.data,
-	'std_msgs/msg/Byte': (x) => x.data,
-	'std_msgs/msg/Int8': (x) => x.data,
-	'std_msgs/msg/UInt8': (x) => x.data,
-	'std_msgs/msg/Int16': (x) => x.data,
-	'std_msgs/msg/UInt16': (x) => x.data,
-	'std_msgs/msg/Float64': (x) => x.data,
-	'std_msgs/msg/Float32': (x) => x.data,
-	'std_msgs/msg/Bool': (x) => (x.data ? 1 : 0),
+	'std_msgs/msg/Int32': {data: (x) => x.data},
+	'std_msgs/msg/UInt32': {data: (x) => x.data},
+	'std_msgs/msg/Int64	': {data: (x) => x.data},
+	'std_msgs/msg/UInt64': {data: (x) => x.data},
+	'std_msgs/msg/Byte': {data: (x) => x.data},
+	'std_msgs/msg/Int8': {data: (x) => x.data},
+	'std_msgs/msg/UInt8': {data: (x) => x.data},
+	'std_msgs/msg/Int16': {data: (x) => x.data},
+	'std_msgs/msg/UInt16': {data: (x) => x.data},
+	'std_msgs/msg/Float64': {data: (x) => x.data},
+	'std_msgs/msg/Float32': {data: (x) => x.data},
+	'std_msgs/msg/Bool': {data: (x) => (x.data ? 1 : 0)},
+	'nav_msgs/msg/Odometry': {
+		'twist/twist/linear/x': (x) => x.twist.twist.linear.x,
+		'twist/twist/linear/y': (x) => x.twist.twist.linear.y,
+		'twist/twist/linear/z': (x) => x.twist.twist.linear.z,
+
+
+		'twist/twist/angular/x': (x) => x.twist.twist.angular.x,
+		'twist/twist/angular/y': (x) => x.twist.twist.angular.y,
+		'twist/twist/angular/z': (x) => x.twist.twist.angular.z,
+	}
 }
 
 export interface PolarPlottableMapping {
@@ -64,8 +74,8 @@ export class RosTopic {
 		return this.type
 	}
 
-	public isPlottable(mapping: PlottableMapping = PLOTTABLE_TYPES): boolean {
-		return mapping[this.getType()] !== undefined
+	public isPlottable(mapping: PlottableMapping = PLOTTABLE_TYPES): string[] {
+		return Object.keys(mapping[this.getType()] ?? {})
 	}
 
 	public isPolarPlottable(
@@ -87,10 +97,11 @@ export class RosTopic {
 	}
 
 	public subscribePlot(
+		id: string,
 		s: (data: number) => void,
 		mapping: PlottableMapping = PLOTTABLE_TYPES,
 	): Topic {
-		const map_fn = mapping[this.getType()]
+		const map_fn = (mapping[this.getType()] ?? {})[id]
 		if (map_fn === undefined)
 			throw new Error(
 				'Unable to subscribe to a topic of type ' + this.getType(),

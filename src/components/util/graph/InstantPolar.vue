@@ -102,7 +102,7 @@ const drawBackground = (ctx: CanvasRenderingContext2D) => {
 		const r = p.radius * ratio
 		const theta = angleIncr * p.angle_idx + minAngle - Math.PI / 2
 		return {
-			x: r * Math.cos(theta) + centerX,
+			x: -r * Math.cos(theta) + centerX,
 			y: r * Math.sin(theta) + centerY,
 		}
 	}

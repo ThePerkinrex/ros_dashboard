@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="D extends GraphDataset">
 import { computed, ref, type Ref, type StyleValue } from 'vue'
+import C2S from 'canvas2svg'
 import playIcon from '@/assets/icons/play.svg'
 import pauseIcon from '@/assets/icons/pause.svg'
 
@@ -23,7 +24,7 @@ export type Props<D extends GraphDataset> = {
 	width?: number
 	height?: number
 	legendStyle?: StyleValue
-	drawBackground(ctx: CanvasRenderingContext2D): void
+	drawBackground(ctx: CanvasRenderingContext2D, theme: Theme): void
 	prepare(ctx: CanvasRenderingContext2D): void
 	prepareDataset(name: string, dataset: D): void
 }
@@ -34,9 +35,31 @@ export type ExposedGraph<D extends GraphDataset> = {
 	update(datasets: GraphDatasets<D>): void
 }
 
+export type Theme = {
+	COLOR_NON_SIGNIFICANT: string
+	COLOR_SIGNIFICANT: string
+	COLOR_TICK_TEXT: string
+}
+
+const DARK_THEME: Theme = {
+	COLOR_NON_SIGNIFICANT: 'rgb(30,30,30)',
+	COLOR_SIGNIFICANT: 'rgb(50,50,50)',
+	COLOR_TICK_TEXT: 'rgb(240,240,240)',
+}
+
+// Example light theme (customize as needed)
+const LIGHT_THEME: Theme = {
+	COLOR_NON_SIGNIFICANT: '#f0f0f0',
+	COLOR_SIGNIFICANT: '#c0c0c0',
+	COLOR_TICK_TEXT: '#333333',
+}
+
 const props = defineProps<Props<D>>()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
+
+// hold the latest datasets for SVG export
+const lastDatasets = ref<GraphDatasets<D> | null>(null)
 
 type LegendItem = { name: string; color: string }
 
@@ -44,15 +67,15 @@ const legend = ref<LegendItem[]>([])
 
 const paused = ref<boolean>(false)
 
-const update = (datasets: GraphDatasets<D>) => {
-	const c = canvas.value
-	const datasetsLength = Object.keys(datasets).length
-	if (c === null || datasetsLength === 0) return
-	const ctx = c.getContext('2d')
-	if (ctx === null) return
-	if (paused) return
-
-	const newLegend = new Array<LegendItem>(datasetsLength)
+function paintGraph(
+	datasets: GraphDatasets<D>,
+	ctx: CanvasRenderingContext2D,
+	theme: Theme,
+	datasetsLength?: number,
+) {
+	const newLegend = new Array<LegendItem>(
+		datasetsLength ?? Object.keys(datasets).length,
+	)
 
 	props.prepare(ctx)
 
@@ -75,7 +98,7 @@ const update = (datasets: GraphDatasets<D>) => {
 
 	ctx.clearRect(0, 0, width.value, height.value)
 
-	props.drawBackground(ctx)
+	props.drawBackground(ctx, theme)
 
 	ctx.lineWidth = 1
 	for (const name in datasets) {
@@ -95,6 +118,18 @@ const update = (datasets: GraphDatasets<D>) => {
 		}
 		ctx.stroke()
 	}
+}
+
+const update = (datasets: GraphDatasets<D>) => {
+	const c = canvas.value
+	const datasetsLength = Object.keys(datasets).length
+	if (c === null || datasetsLength === 0) return
+	const ctx = c.getContext('2d')
+	if (ctx === null) return
+	if (paused.value) return
+	lastDatasets.value = datasets
+
+	paintGraph(datasets, ctx, DARK_THEME, datasetsLength)
 }
 
 const width = computed(() => props.width ?? 600)
@@ -117,34 +152,39 @@ function togglePlayPause() {
 }
 
 function save() {
-	const c = canvas.value
-	if (!c) return
+	if (!lastDatasets.value) return
+	const svgCtx = new C2S(width.value, height.value)
 
-	if (c.toBlob) {
-		c.toBlob((blob) => {
-			if (!blob) return
-			const url = URL.createObjectURL(blob)
-			const a = document.createElement('a')
-			a.href = url
-			a.download = `graph-${new Date().toISOString()}.png`
-			document.body.appendChild(a)
-			a.click()
-			document.body.removeChild(a)
-			URL.revokeObjectURL(url)
-		}, 'image/png')
-	} else {
-		const dataURL = c.toDataURL('image/png')
-		const a = document.createElement('a')
-		a.href = dataURL
-		a.download = `graph-${new Date().toISOString()}.png`
-		a.click()
-	}
+	paintGraph(lastDatasets.value, svgCtx, LIGHT_THEME)
+
+	const svgString = svgCtx.getSerializedSvg()
+	const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+	const url = URL.createObjectURL(blob)
+	const a = document.createElement('a')
+	a.href = url
+	a.download = `graph-${new Date().toISOString()}.svg`
+	document.body.appendChild(a)
+	a.click()
+	document.body.removeChild(a)
+	URL.revokeObjectURL(url)
 }
 </script>
 
 <template>
 	<div class="content">
 		<canvas ref="canvas" :width="width" :height="height"></canvas>
+		<div class="controlbar overlay">
+			<img
+				:src="paused ? playIcon : pauseIcon"
+				class="iconbutton"
+				@click="togglePlayPause"
+			/>
+			<img
+				src="@/assets/icons/save.svg"
+				class="iconbutton"
+				@click="save"
+			/>
+		</div>
 		<div
 			class="legend overlay"
 			:style="props.legendStyle"
@@ -157,18 +197,6 @@ function save() {
 				></div>
 				<span class="legend-name">{{ i.name }}</span>
 			</div>
-		</div>
-		<div class="controlbar overlay">
-			<img
-				:src="paused ? playIcon : pauseIcon"
-				class="iconbutton"
-				@click="togglePlayPause"
-			/>
-			<img
-				src="@/assets/icons/save.svg"
-				class="iconbutton"
-				@click="save"
-			/>
 		</div>
 	</div>
 </template>

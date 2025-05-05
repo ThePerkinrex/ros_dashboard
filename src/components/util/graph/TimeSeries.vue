@@ -3,11 +3,11 @@ import { connection_status, ConnectionStatus } from '@/ros/ros'
 import { RosService } from '@/ros/service'
 import type { CircularBuffer } from '@/util'
 import { computed, onMounted, ref, watch } from 'vue'
-import Graph, { type ExposedGraph, type GraphDataset } from './Graph.vue'
-
-const COLOR_NON_SIGNIFICANT = 'rgb(30,30,30)'
-const COLOR_SIGNIFICANT = 'rgb(50,50,50)'
-const COLOR_TICK_TEXT = 'rgb(240,240,240)'
+import Graph, {
+	type ExposedGraph,
+	type GraphDataset,
+	type Theme,
+} from './Graph.vue'
 
 export type Timestamp = number
 
@@ -76,7 +76,7 @@ const prepareDataset = (name: string, dataset: ExtendedPlotDataset) => {
 	}
 }
 
-const drawBackground = (ctx: CanvasRenderingContext2D) => {
+const drawBackground = (ctx: CanvasRenderingContext2D, theme: Theme) => {
 	let diffY = preparedData.maxY - preparedData.minY
 	if (diffY === 0) {
 		preparedData.maxY = 1.1
@@ -113,17 +113,40 @@ const drawBackground = (ctx: CanvasRenderingContext2D) => {
 	ctx.lineWidth = 1
 	for (const tick of yTicks.ticks) {
 		ctx.strokeStyle = tick.significant
-			? COLOR_SIGNIFICANT
-			: COLOR_NON_SIGNIFICANT
+			? theme.COLOR_SIGNIFICANT
+			: theme.COLOR_NON_SIGNIFICANT
 		const mapped = map({ x: 0, y: tick.y })
 		ctx.beginPath()
 		ctx.moveTo(baseX, mapped.y)
 		ctx.lineTo(graph.value!.width, mapped.y)
 		ctx.stroke()
 		if (tick.significant) {
-			ctx.fillStyle = COLOR_TICK_TEXT
+			ctx.fillStyle = theme.COLOR_TICK_TEXT
 			ctx.fillText(tick.text, 5, mapped.y)
 		}
+	}
+
+	// — 4. Fixed-per-second vertical ticks (seconds ago) —
+	ctx.textBaseline = 'top'
+	ctx.textAlign = 'center'
+	const bottomMargin = 15
+	const totalSecs = Math.floor(timeLength.value)
+
+	for (let sAgo = 0; sAgo <= totalSecs; sAgo += 1) {
+		// X in canvas = baseX + (timeLength - sAgo) * xRatio
+		const xC = baseX + (timeLength.value - sAgo) * xRatio
+
+		// vertical line
+		ctx.strokeStyle = theme.COLOR_SIGNIFICANT
+		ctx.lineWidth = 1
+		ctx.beginPath()
+		ctx.moveTo(xC, 0)
+		ctx.lineTo(xC, height)
+		ctx.stroke()
+
+		// label = seconds ago
+		ctx.fillStyle = theme.COLOR_TICK_TEXT
+		ctx.fillText(`-${sAgo}s`, xC, height - bottomMargin)
 	}
 
 	preparedData.map = map

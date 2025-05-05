@@ -3,11 +3,11 @@ import { connection_status, ConnectionStatus } from '@/ros/ros'
 import { RosService } from '@/ros/service'
 import type { CircularBuffer } from '@/util'
 import { computed, onMounted, ref, watch } from 'vue'
-import Graph, { type ExposedGraph, type GraphDataset } from './Graph.vue'
-
-const COLOR_NON_SIGNIFICANT = 'rgb(30,30,30)'
-const COLOR_SIGNIFICANT = 'rgb(50,50,50)'
-const COLOR_TICK_TEXT = 'rgb(240,240,240)'
+import Graph, {
+	type ExposedGraph,
+	type GraphDataset,
+	type Theme,
+} from './Graph.vue'
 
 const MARGIN_LABEL = 4
 
@@ -80,7 +80,7 @@ const prepareDataset = (name: string, dataset: ExtendedPlotDataset) => {
 		preparedData.minRadius = newMinRadius
 }
 
-const drawBackground = (ctx: CanvasRenderingContext2D) => {
+const drawBackground = (ctx: CanvasRenderingContext2D, theme: Theme) => {
 	preparedData.maxRadius += preparedData.maxRadius * 0.1
 
 	const height = graph.value!.height
@@ -107,7 +107,7 @@ const drawBackground = (ctx: CanvasRenderingContext2D) => {
 		}
 	}
 
-	ctx.fillStyle = COLOR_SIGNIFICANT
+	ctx.fillStyle = theme.COLOR_SIGNIFICANT
 	ctx.beginPath()
 	ctx.arc(centerX, centerY, 2, 0, Math.PI * 2)
 	ctx.fill()
@@ -123,8 +123,8 @@ const drawBackground = (ctx: CanvasRenderingContext2D) => {
 
 	for (const tick of ticks) {
 		ctx.strokeStyle = tick.significant
-			? COLOR_SIGNIFICANT
-			: COLOR_NON_SIGNIFICANT
+			? theme.COLOR_SIGNIFICANT
+			: theme.COLOR_NON_SIGNIFICANT
 		const r = tick.radius * ratio
 		ctx.beginPath()
 		ctx.arc(centerX, centerY, r, 0, Math.PI * 2)
@@ -146,7 +146,7 @@ const drawBackground = (ctx: CanvasRenderingContext2D) => {
 					metrics.actualBoundingBoxDescent +
 					MARGIN_LABEL * 2,
 			)
-			ctx.fillStyle = COLOR_TICK_TEXT
+			ctx.fillStyle = theme.COLOR_TICK_TEXT
 			ctx.fillText(tick.text, centerX, y)
 		}
 	}

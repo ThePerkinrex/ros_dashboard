@@ -10,6 +10,8 @@ import PlotsTab from './components/tabs/plots/PlotsTab.vue'
 import EmergencyBrake from './components/EmergencyBrake.vue'
 import PolarPlotsTabTitle from './components/tabs/polarPlots/PolarPlotsTabTitle.vue'
 import PolarPlotsTab from './components/tabs/polarPlots/PolarPlotsTab.vue'
+import MapTabTitle from './components/tabs/map/MapTabTitle.vue'
+import MapTab from './components/tabs/map/MapTab.vue'
 
 const ros = new Ros()
 
@@ -35,6 +37,7 @@ ros.setURL(url.value)
 					{ title: ParametersTabTitle, content: ParametersTab },
 					{ title: PlotsTabTitle, content: PlotsTab },
 					{ title: PolarPlotsTabTitle, content: PolarPlotsTab },
+					{ title: MapTabTitle, content: MapTab },
 				]"
 			/>
 		</main>

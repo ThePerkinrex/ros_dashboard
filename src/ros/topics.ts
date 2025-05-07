@@ -1,33 +1,33 @@
 import { Topic } from 'roslib'
 import { ros_singleton } from './ros'
+import type OccupancyGrid from './data/nav_msgs/OccupancyGrid'
 
 export interface PlottableMapping {
 	[name: string]: Record<string, (x: any) => number>
 }
 
 const PLOTTABLE_TYPES: PlottableMapping = {
-	'std_msgs/msg/Int32': {data: (x) => x.data},
-	'std_msgs/msg/UInt32': {data: (x) => x.data},
-	'std_msgs/msg/Int64	': {data: (x) => x.data},
-	'std_msgs/msg/UInt64': {data: (x) => x.data},
-	'std_msgs/msg/Byte': {data: (x) => x.data},
-	'std_msgs/msg/Int8': {data: (x) => x.data},
-	'std_msgs/msg/UInt8': {data: (x) => x.data},
-	'std_msgs/msg/Int16': {data: (x) => x.data},
-	'std_msgs/msg/UInt16': {data: (x) => x.data},
-	'std_msgs/msg/Float64': {data: (x) => x.data},
-	'std_msgs/msg/Float32': {data: (x) => x.data},
-	'std_msgs/msg/Bool': {data: (x) => (x.data ? 1 : 0)},
+	'std_msgs/msg/Int32': { data: (x) => x.data },
+	'std_msgs/msg/UInt32': { data: (x) => x.data },
+	'std_msgs/msg/Int64	': { data: (x) => x.data },
+	'std_msgs/msg/UInt64': { data: (x) => x.data },
+	'std_msgs/msg/Byte': { data: (x) => x.data },
+	'std_msgs/msg/Int8': { data: (x) => x.data },
+	'std_msgs/msg/UInt8': { data: (x) => x.data },
+	'std_msgs/msg/Int16': { data: (x) => x.data },
+	'std_msgs/msg/UInt16': { data: (x) => x.data },
+	'std_msgs/msg/Float64': { data: (x) => x.data },
+	'std_msgs/msg/Float32': { data: (x) => x.data },
+	'std_msgs/msg/Bool': { data: (x) => (x.data ? 1 : 0) },
 	'nav_msgs/msg/Odometry': {
 		'twist/twist/linear/x': (x) => x.twist.twist.linear.x,
 		'twist/twist/linear/y': (x) => x.twist.twist.linear.y,
 		'twist/twist/linear/z': (x) => x.twist.twist.linear.z,
 
-
 		'twist/twist/angular/x': (x) => x.twist.twist.angular.x,
 		'twist/twist/angular/y': (x) => x.twist.twist.angular.y,
 		'twist/twist/angular/z': (x) => x.twist.twist.angular.z,
-	}
+	},
 }
 
 export interface PolarPlottableMapping {
@@ -57,11 +57,22 @@ const INSTANT_POLAR_PLOTTABLE: PolarPlottableMapping = {
 	},
 }
 
-export class RosTopic {
-	private name: string
-	private type: string
+// 1) The pure, finite map of everything you know about:
+export interface KnownRosTopicTypes {
+	'nav_msgs/msg/OccupancyGrid': OccupancyGrid
+	// …other specific mappings…
+}
 
-	constructor(name: string, type: string) {
+// 2) A helper that looks up T in that map, or else falls back to any:
+export type RosTopicData<T extends string> = T extends keyof KnownRosTopicTypes
+	? KnownRosTopicTypes[T]
+	: any
+
+export class RosTopic<N extends string = string> {
+	private name: string
+	private type: N
+
+	constructor(name: string, type: N) {
 		this.name = name
 		this.type = type
 	}
@@ -74,6 +85,10 @@ export class RosTopic {
 		return this.type
 	}
 
+	public is<A extends N>(...type: A[]): this is RosTopic<A> {
+		return type.some((a) => a === this.getType())
+	}
+
 	public isPlottable(mapping: PlottableMapping = PLOTTABLE_TYPES): string[] {
 		return Object.keys(mapping[this.getType()] ?? {})
 	}
@@ -84,14 +99,25 @@ export class RosTopic {
 		return mapping[this.getType()] !== undefined
 	}
 
-	public subscribe(s: (m: any) => void): Topic {
+	public subscribe(
+		s: (m: RosTopicData<N>) => void,
+		options: {
+			compression?: string
+			throttle_rate?: number
+			queue_size?: number
+			latch?: boolean
+			queue_length?: number
+		} = {},
+	): Topic {
 		const t = new Topic({
 			ros: ros_singleton,
 			name: this.getName(),
 			messageType: this.getType(),
+			...options,
 		})
 		t.subscribe((m) => {
-			s(m)
+			console.log(`Received message on  ${t.name}: ${JSON.stringify(m)}`)
+			s(m as RosTopicData<N>)
 		})
 		return t
 	}

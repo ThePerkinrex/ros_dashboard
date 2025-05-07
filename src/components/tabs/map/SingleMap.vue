@@ -6,10 +6,10 @@ import type { RosParam } from '@/ros/params'
 import type { RosTopic } from '@/ros/topics'
 import type { Topic } from 'roslib'
 import { computed, type ShallowRefMarker } from '@vue/reactivity'
-import type { PlotDatasets } from '@/components/util/graph/TimeSeries.vue'
-import TimeSeries from '@/components/util/graph/TimeSeries.vue'
 import { CircularBuffer } from '@/util'
 import { cssColors } from '@/util/color'
+import type { MapDatasets } from '@/components/util/graph/Map.vue'
+import Map from '@/components/util/graph/Map.vue'
 
 const props = defineProps<{
 	colorGenerator?: Generator<string, never, undefined>
@@ -20,28 +20,36 @@ const colorGenerator = computed(() => props.colorGenerator ?? defaultColorGen)
 
 type TopicData = {
 	rosTopic: RosTopic
-	key: string
 	subscription: { subscribed: Topic } | null
 }
 
+type KeyedTopicData = {
+	key: string
+} & TopicData
+
 const ros = new Ros()
-const topics = ref<TopicData[]>([])
+const mapTopics = ref<RosTopic<'nav_msgs/msg/OccupancyGrid'>[]>([])
 
 watch(
 	connection_status,
 	async (c) => {
 		if (c === ConnectionStatus.CONNECTED) {
-			topics.value = (await ros.getTopics()).flatMap((t) =>
-				t
-					.isPlottable()
-					.map((key) => ({ rosTopic: t, key, subscription: null })),
-			)
+			mapTopics.value = (await ros.getTopics())
+				// .map((t) => {
+				// 	console.log('Before filtering', t)
+				// 	return t
+				// })
+				.filter((t) => t.is('nav_msgs/msg/OccupancyGrid'))
+			// .map((t) => {
+			// 	console.log('After filtering', t)
+			// 	return t
+			// })
 		}
 	},
 	{ immediate: true },
 )
 
-const datasets: PlotDatasets = {}
+let datasets: MapDatasets | undefined = undefined
 
 // const data = computed<ChartData<'line'>>(() => {
 // 	const d: ChartData<'line'> = {
@@ -83,32 +91,40 @@ const datasets: PlotDatasets = {}
 // 	},
 // }
 
-const plot = ref<{ update: (datasets: PlotDatasets) => void } | null>(null)
+const map = ref<{ update: (datasets: MapDatasets) => void } | null>(null)
 
 function getColor(): string {
 	return colorGenerator.value.next().value
 }
 
-function toggleDataset(t: TopicData) {
-	console.log('toggle', t.rosTopic.getName())
-	if (t.subscription === null) {
-		const color = getColor()
-		console.log('Adding', color)
-		const id = t.rosTopic.getName()
-		datasets[id] = {
-			data: new CircularBuffer(),
-			color: color,
-		}
-		t.subscription = {
-			subscribed: t.rosTopic.subscribePlot(t.key, (data) => {
-				datasets[id].data.push({ x: Date.now() / 1000, y: data })
-				if (plot.value !== null) plot.value.update(datasets)
-			}),
-		}
-	} else {
-		delete datasets[t.rosTopic.getName()]
-		t.rosTopic.unsubscribe(t.subscription.subscribed)
-		t.subscription = null
+let lastSelectedMap:
+	| { rostopic: RosTopic<'nav_msgs/msg/OccupancyGrid'>; subscription: Topic }
+	| undefined
+
+function setMap(t: RosTopic<'nav_msgs/msg/OccupancyGrid'>) {
+	console.log('set map', t.getName())
+	if (lastSelectedMap !== undefined) {
+		lastSelectedMap.rostopic.unsubscribe(lastSelectedMap.subscription)
+		lastSelectedMap = undefined
+	}
+	lastSelectedMap = {
+		rostopic: t,
+		subscription: t.subscribe(
+			(m) => {
+				console.log('Received value: ', m)
+				datasets = {
+					...(datasets || {}),
+					map: {
+						map: m,
+						color: '#0000',
+					},
+				}
+				if (map.value !== null) map.value.update(datasets)
+			},
+			{
+				compression: 'cbor',
+			},
+		),
 	}
 }
 </script>
@@ -119,21 +135,23 @@ function toggleDataset(t: TopicData) {
 			<slot></slot>
 			<div
 				class="topic"
-				v-for="topic in topics"
-				:key="topic.rosTopic.getName() + topic.key"
+				v-for="topic in mapTopics"
+				:key="topic.getName()"
 			>
 				<input
-					type="checkbox"
-					:id="topic.rosTopic.getName() + topic.key"
-					@change="toggleDataset(topic as TopicData)"
+					type="radio"
+					:id="topic.getName()"
+					@change="
+						setMap(topic as RosTopic<'nav_msgs/msg/OccupancyGrid'>)
+					"
+					name="map"
+					:checked="false"
 				/>
-				<label :for="topic.rosTopic.getName() + topic.key">{{
-					topic.rosTopic.getName() + '+' + topic.key
-				}}</label>
+				<label :for="topic.getName()">{{ topic.getName() }}</label>
 			</div>
 		</aside>
 		<div class="main">
-			<TimeSeries ref="plot" />
+			<Map ref="map" />
 		</div>
 	</div>
 </template>

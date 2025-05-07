@@ -39,12 +39,20 @@ export type Theme = {
 	COLOR_NON_SIGNIFICANT: string
 	COLOR_SIGNIFICANT: string
 	COLOR_TICK_TEXT: string
+	MAP_OCCUPANCY: {
+		not_occupied: number
+		occupied: number
+	}
 }
 
 const DARK_THEME: Theme = {
 	COLOR_NON_SIGNIFICANT: 'rgb(30,30,30)',
 	COLOR_SIGNIFICANT: 'rgb(50,50,50)',
 	COLOR_TICK_TEXT: 'rgb(240,240,240)',
+	MAP_OCCUPANCY: {
+		not_occupied: 0,
+		occupied: 150,
+	},
 }
 
 // Example light theme (customize as needed)
@@ -52,6 +60,10 @@ const LIGHT_THEME: Theme = {
 	COLOR_NON_SIGNIFICANT: '#f0f0f0',
 	COLOR_SIGNIFICANT: '#c0c0c0',
 	COLOR_TICK_TEXT: '#333333',
+	MAP_OCCUPANCY: {
+		not_occupied: 255,
+		occupied: 0,
+	},
 }
 
 const props = defineProps<Props<D>>()

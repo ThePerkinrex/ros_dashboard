@@ -35,6 +35,7 @@ const graph = ref<ExposedGraph<ExtendedMapDataset> | null>(null)
 
 let preparedData: {
 	data: OccupancyGrid | undefined
+	ratio: number
 	map: (p: Point) => Point
 } = {
 	// latestX: 0,
@@ -42,6 +43,7 @@ let preparedData: {
 	// minY: Infinity,
 	// minX: 0,
 	data: undefined,
+	ratio: 1,
 	map: (p) => p,
 }
 
@@ -53,6 +55,7 @@ const prepare = (ctx: CanvasRenderingContext2D) => {
 		// maxY: -Infinity,
 		// minY: Infinity,
 		// minX: 0,
+		ratio: 1,
 		data: undefined,
 		map: (p) => p,
 	}
@@ -74,9 +77,10 @@ const prepareDataset = (name: string, dataset: ExtendedMapDataset) => {
 
 		preparedData.map = (p) => ({
 			x: p.x * minRatio,
-			y: p.y * minRatio,
+			y: (hMap - p.y) * minRatio,
 		})
 		preparedData.data = dataset.map
+		preparedData.ratio = minRatio
 	}
 	// const latestInDataset = dataset.data.get(dataset.data.size() - 1)
 	// if (latestInDataset.x > preparedData.latestX)
@@ -97,7 +101,7 @@ const drawBackground = (ctx: CanvasRenderingContext2D, theme: Theme) => {
 		-1,
 	)
 	if (preparedData.data !== undefined) {
-		const mappedSize = preparedData.map({ x: 1, y: 1 })
+		const mappedSize = preparedData.ratio
 		for (let x = 0; x < preparedData.data.info.width; x++) {
 			for (let y = 0; y < preparedData.data.info.height; y++) {
 				const i = y * preparedData.data.info.height + x
@@ -109,8 +113,8 @@ const drawBackground = (ctx: CanvasRenderingContext2D, theme: Theme) => {
 				ctx.fillRect(
 					mappedPoint.x,
 					mappedPoint.y,
-					mappedSize.x,
-					mappedSize.y,
+					mappedSize,
+					mappedSize,
 				)
 			}
 		}
@@ -218,8 +222,8 @@ defineExpose({ update })
 
 <template>
 	<Graph
-		:height="props.height"
-		:width="props.width"
+		:height="props.height ?? 800"
+		:width="props.width ?? 800"
 		:draw-background="drawBackground"
 		:prepare="prepare"
 		:prepare-dataset="prepareDataset"

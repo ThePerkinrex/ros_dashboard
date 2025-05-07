@@ -133,22 +133,26 @@ function setMap(t: RosTopic<'nav_msgs/msg/OccupancyGrid'>) {
 	<div class="content">
 		<aside>
 			<slot></slot>
-			<div
-				class="topic"
-				v-for="topic in mapTopics"
-				:key="topic.getName()"
-			>
-				<input
-					type="radio"
-					:id="topic.getName()"
-					@change="
-						setMap(topic as RosTopic<'nav_msgs/msg/OccupancyGrid'>)
-					"
-					name="map"
-					:checked="false"
-				/>
-				<label :for="topic.getName()">{{ topic.getName() }}</label>
-			</div>
+			<details>
+				<summary>Map Topics</summary>
+				<div
+					class="topic"
+					v-for="topic in mapTopics"
+					:key="topic.getName()"
+				>
+					<input
+						type="radio"
+						:id="topic.getName()"
+						@change="
+							setMap(
+								topic as RosTopic<'nav_msgs/msg/OccupancyGrid'>,
+							)
+						"
+						name="map"
+					/>
+					<label :for="topic.getName()">{{ topic.getName() }}</label>
+				</div>
+			</details>
 		</aside>
 		<div class="main">
 			<Map ref="map" />

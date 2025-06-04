@@ -29,6 +29,9 @@ type KeyedTopicData = {
 
 const ros = new Ros()
 const mapTopics = ref<RosTopic<'nav_msgs/msg/OccupancyGrid'>[]>([])
+const pointTopics = ref<
+	RosTopic<'geometry_msgs/msg/PointStamped' | 'nav_msgs/msg/Odometry'>[]
+>([])
 
 watch(
 	connection_status,
@@ -44,52 +47,18 @@ watch(
 			// 	console.log('After filtering', t)
 			// 	return t
 			// })
+
+			pointTopics.value = (await ros.getTopics()).filter(
+				(t) =>
+					t.is('geometry_msgs/msg/PointStamped') ||
+					t.is('nav_msgs/msg/Odometry'),
+			)
 		}
 	},
 	{ immediate: true },
 )
 
 let datasets: MapDatasets | undefined = undefined
-
-// const data = computed<ChartData<'line'>>(() => {
-// 	const d: ChartData<'line'> = {
-// 		datasets: Object.getOwnPropertySymbols(datasets.value).map(
-// 			(x) => datasets.value[x],
-// 		),
-// 	}
-// 	console.log('Compute data: ', d, datasets.value)
-// 	return d
-// })
-
-// const options: ChartOptions<'line'> = {
-// 	scales: {
-// 		x: {
-// 			type: 'time',
-// 			ticks: {
-// 				// minRotation: 0,
-// 				// maxRotation: 0,
-// 				// sampleSize: 3,
-// 				// maxTicksLimit: 5,
-// 				display: false,
-// 			},
-// 		},
-// 	},
-// 	plugins: {
-// 		colors: {
-// 			forceOverride: true,
-// 		},
-// 	},
-// 	borderColor: '#FFFFFF',
-// 	backgroundColor: '#DDDDDD',
-// 	animation: false,
-// 	normalized: true,
-// 	spanGaps: true,
-// 	elements: {
-// 		point: {
-// 			radius: 0,
-// 		},
-// 	},
-// }
 
 const map = ref<{ update: (datasets: MapDatasets) => void } | null>(null)
 
@@ -112,9 +81,11 @@ function setMap(t: RosTopic<'nav_msgs/msg/OccupancyGrid'>) {
 		subscription: t.subscribe(
 			(m) => {
 				console.log('Received value: ', m)
+
 				datasets = {
-					...(datasets || {}),
+					...(datasets || { traces: {} }),
 					map: {
+						type: 'map',
 						map: m,
 						color: '#0000',
 					},
@@ -127,13 +98,98 @@ function setMap(t: RosTopic<'nav_msgs/msg/OccupancyGrid'>) {
 		),
 	}
 }
+
+let traces: Record<
+	string,
+	{
+		rostopic: RosTopic<
+			'geometry_msgs/msg/PointStamped' | 'nav_msgs/msg/Odometry'
+		>
+		subscription: Topic
+	}
+> = {}
+
+function toggleTrace(
+	t: RosTopic<'geometry_msgs/msg/PointStamped' | 'nav_msgs/msg/Odometry'>,
+) {
+	console.log('Trace toggled', t.getName(), traces, datasets)
+	const datasets_const = datasets
+	if (datasets_const === undefined) {
+		return
+	}
+	const trace = traces[t.getName()]
+	if (trace !== undefined) {
+		trace.rostopic.unsubscribe(trace.subscription)
+		delete traces[t.getName()]
+	} else if (t.is('geometry_msgs/msg/PointStamped')) {
+		traces[t.getName()] = {
+			rostopic: t,
+			subscription: t.subscribe(
+				(point) => {
+					if (datasets_const.traces[t.getName()] === undefined) {
+						datasets_const.traces[t.getName()] = {
+							color: getColor(),
+							data: new CircularBuffer(20),
+							type: 'trace',
+						}
+					}
+					const d = {
+						x: point.point.x,
+						y: point.point.y,
+						time:
+							point.header.stamp.sec +
+							point.header.stamp.nanosec * 10e-9,
+					}
+					// console.log(d)
+					datasets_const.traces[t.getName()]!.data.push(d)
+
+					if (map.value !== null) map.value.update(datasets_const)
+				},
+				{
+					throttle_rate: 100,
+					queue_length: 1,
+				},
+			),
+		}
+	} else if (t.is('nav_msgs/msg/Odometry')) {
+		traces[t.getName()] = {
+			rostopic: t,
+			subscription: t.subscribe(
+				(point) => {
+					if (datasets_const.traces[t.getName()] === undefined) {
+						datasets_const.traces[t.getName()] = {
+							color: getColor(),
+							data: new CircularBuffer(20),
+							type: 'trace',
+						}
+					}
+					const d = {
+						x: point.pose.pose.position.x,
+						y: point.pose.pose.position.y,
+						time:
+							point.header.stamp.sec +
+							point.header.stamp.nanosec * 10e-9,
+					}
+					// console.log(d)
+					datasets_const.traces[t.getName()]!.data.push(d)
+
+					if (map.value !== null) map.value.update(datasets_const)
+				},
+				{
+					throttle_rate: 100,
+					queue_length: 1,
+				},
+			),
+		}
+	}
+}
 </script>
 
 <template>
 	<div class="content">
 		<aside>
 			<slot></slot>
-			<details>
+			<details open>
 				<summary>Map Topics</summary>
 				<div
 					class="topic"
@@ -142,7 +198,7 @@ function setMap(t: RosTopic<'nav_msgs/msg/OccupancyGrid'>) {
 				>
 					<input
 						type="radio"
-						:id="topic.getName()"
+						:id="'map-' + topic.getName()"
 						@change="
 							setMap(
 								topic as RosTopic<'nav_msgs/msg/OccupancyGrid'>,
@@ -150,7 +206,30 @@ function setMap(t: RosTopic<'nav_msgs/msg/OccupancyGrid'>) {
 						"
 						name="map"
 					/>
-					<label :for="topic.getName()">{{ topic.getName() }}</label>
+					<label :for="'map-' + topic.getName()">{{
+						topic.getName()
+					}}</label>
+				</div>
+			</details>
+			<details open>
+				<summary>Point Topics</summary>
+				<div
+					class="topic"
+					v-for="topic in pointTopics"
+					:key="topic.getName()"
+				>
+					<input
+						type="checkbox"
+						:id="'point-' + topic.getName()"
+						@change="
+							toggleTrace(
+								topic as RosTopic<'geometry_msgs/msg/PointStamped'>,
+							)
+						"
+					/>
+					<label :for="'point-' + topic.getName()">{{
+						topic.getName()
+					}}</label>
 				</div>
 			</details>
 		</aside>

@@ -1,5 +1,7 @@
+import type Time from '../builtin_interfaces/msg/Time'
+
 export default interface Header {
-	seq: number
+	// seq: number
 	frame_id: string
-	// TODO time stamp
+	stamp: Time
 }

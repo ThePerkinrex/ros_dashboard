@@ -1,6 +1,8 @@
 import { Topic } from 'roslib'
 import { ros_singleton } from './ros'
 import type OccupancyGrid from './data/nav_msgs/OccupancyGrid'
+import type PointStamped from './data/geometry_msgs/msg/PointStamped'
+import type Odometry from './data/nav_msgs/msg/Odometry'
 
 export interface PlottableMapping {
 	[name: string]: Record<string, (x: any) => number>
@@ -60,6 +62,8 @@ const INSTANT_POLAR_PLOTTABLE: PolarPlottableMapping = {
 // 1) The pure, finite map of everything you know about:
 export interface KnownRosTopicTypes {
 	'nav_msgs/msg/OccupancyGrid': OccupancyGrid
+	'geometry_msgs/msg/PointStamped': PointStamped
+	'nav_msgs/msg/Odometry': Odometry
 	// …other specific mappings…
 }
 
@@ -116,7 +120,7 @@ export class RosTopic<N extends string = string> {
 			...options,
 		})
 		t.subscribe((m) => {
-			console.log(`Received message on  ${t.name}: ${JSON.stringify(m)}`)
+			// console.log(`Received message on  ${t.name}: ${JSON.stringify(m)}`)
 			s(m as RosTopicData<N>)
 		})
 		return t

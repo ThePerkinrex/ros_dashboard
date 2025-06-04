@@ -18,11 +18,19 @@ type Point = {
 }
 
 export type MapDataset = {
+	type: 'map'
 	map: OccupancyGrid
 	color: string
 }
 
+export type TraceDataset = {
+	type: 'trace'
+	data: CircularBuffer<{ x: number; y: number; time: number }>
+	color: string
+}
+
 type ExtendedMapDataset = MapDataset & GraphDataset
+type ExtendedTraceDataset = TraceDataset & GraphDataset
 
 export type MapData = {
 	width?: number
@@ -31,20 +39,28 @@ export type MapData = {
 
 const props = defineProps<MapData>()
 
-const graph = ref<ExposedGraph<ExtendedMapDataset> | null>(null)
+const graph = ref<ExposedGraph<
+	ExtendedMapDataset | ExtendedTraceDataset
+> | null>(null)
 
 let preparedData: {
 	data: OccupancyGrid | undefined
+	bg: { canvas: OffscreenCanvas; theme: Theme } | undefined
 	ratio: number
+	latestTime: number
 	map: (p: Point) => Point
+	map_ratio: (p: Point) => Point
 } = {
 	// latestX: 0,
 	// maxY: -Infinity,
 	// minY: Infinity,
 	// minX: 0,
+	bg: undefined,
 	data: undefined,
 	ratio: 1,
+	latestTime: 0,
 	map: (p) => p,
+	map_ratio: (p) => p,
 }
 
 const prepare = (ctx: CanvasRenderingContext2D) => {
@@ -55,44 +71,66 @@ const prepare = (ctx: CanvasRenderingContext2D) => {
 		// maxY: -Infinity,
 		// minY: Infinity,
 		// minX: 0,
+		bg: undefined,
 		ratio: 1,
 		data: undefined,
+		latestTime: 0,
 		map: (p) => p,
+		map_ratio: (p) => p,
 	}
 }
 
-const prepareDataset = (name: string, dataset: ExtendedMapDataset) => {
+const triggerRedraw = () => {
+	preparedData.bg = undefined // Trigger a redraw
+}
+
+const prepareDataset = (
+	name: string,
+	dataset: ExtendedMapDataset | ExtendedTraceDataset,
+) => {
 	const g = graph.value
-	if (name === 'map' && g !== null) {
-		const hMap = dataset.map.info.height
-		const wMap = dataset.map.info.width
+	if (g !== null) {
+		if (dataset.type == 'map') {
+			const hMap = dataset.map.info.height
+			const wMap = dataset.map.info.width
 
-		const h = g.height
-		const w = g.width
+			const h = g.height
+			const w = g.width
 
-		const hRatio = h / hMap
-		const wRatio = w / wMap
+			const hRatio = h / hMap
+			const wRatio = w / wMap
 
-		const minRatio = Math.min(hRatio, wRatio)
+			const minRatio = Math.min(hRatio, wRatio)
 
-		preparedData.map = (p) => ({
-			x: p.x * minRatio,
-			y: (hMap - p.y) * minRatio,
-		})
-		preparedData.data = dataset.map
-		preparedData.ratio = minRatio
+			preparedData.map_ratio = (p) => ({
+				x: p.x * minRatio,
+				y: (hMap - p.y) * minRatio,
+			})
+			preparedData.map = (p) =>
+				preparedData.map_ratio({
+					x:
+						(p.x - dataset.map.info.origin.position.x) /
+						dataset.map.info.resolution,
+					y:
+						(p.y - dataset.map.info.origin.position.y) /
+						dataset.map.info.resolution,
+				})
+			preparedData.data = dataset.map
+			triggerRedraw()
+			preparedData.ratio = minRatio
+		} else {
+			const latestInDataset = dataset.data.get(dataset.data.size() - 1)
+			if (latestInDataset.time > preparedData.latestTime)
+				preparedData.latestTime = latestInDataset.time
+		}
 	}
-	// const latestInDataset = dataset.data.get(dataset.data.size() - 1)
-	// if (latestInDataset.x > preparedData.latestX)
-	// 	preparedData.latestX = latestInDataset.x
-	// for (let i = dataset.data.size() - 1; i >= 0; i--) {
-	// 	const p = dataset.data.get(i)
-	// 	if (p.y < preparedData.minY) preparedData.minY = p.y
-	// 	else if (p.y > preparedData.maxY) preparedData.maxY = p.y
-	// }
 }
 
-const drawBackground = (ctx: CanvasRenderingContext2D, theme: Theme) => {
+const drawBackground = (
+	ctx: CanvasRenderingContext2D,
+	theme: Theme,
+	useCache: boolean = true,
+) => {
 	const colorMap = map(
 		0,
 		100,
@@ -100,17 +138,35 @@ const drawBackground = (ctx: CanvasRenderingContext2D, theme: Theme) => {
 		theme.MAP_OCCUPANCY.occupied,
 		-1,
 	)
-	if (preparedData.data !== undefined) {
+	// if (preparedData.bg !== undefined) {
+	// 	ctx.drawImage(preparedData.bg.canvas, 0, 0)
+	// 	return
+	// }
+	if (
+		(!useCache ||
+			preparedData.bg === undefined ||
+			preparedData.bg.theme != theme) &&
+		preparedData.data !== undefined
+	) {
+		let ctxToUse: Pick<CanvasRenderingContext2D, 'fillStyle' | 'fillRect'> =
+			ctx
+		if (useCache) {
+			const bg = new OffscreenCanvas(ctx.canvas.width, ctx.canvas.height)
+			preparedData.bg = { canvas: bg, theme }
+			const bgCtx = bg.getContext('2d')
+			if (bgCtx === null) return
+			ctxToUse = bgCtx
+		}
 		const mappedSize = preparedData.ratio
 		for (let x = 0; x < preparedData.data.info.width; x++) {
 			for (let y = 0; y < preparedData.data.info.height; y++) {
-				const i = y * preparedData.data.info.height + x
+				const i = y * preparedData.data.info.width + x
 				const prob = preparedData.data.data[i]
 				const color = colorMap(prob)
 				if (color === undefined) continue
-				const mappedPoint = preparedData.map({ x, y })
-				ctx.fillStyle = `rgb(${color}, ${color}, ${color})`
-				ctx.fillRect(
+				const mappedPoint = preparedData.map_ratio({ x, y })
+				ctxToUse.fillStyle = `rgb(${color}, ${color}, ${color})`
+				ctxToUse.fillRect(
 					mappedPoint.x,
 					mappedPoint.y,
 					mappedSize,
@@ -119,6 +175,10 @@ const drawBackground = (ctx: CanvasRenderingContext2D, theme: Theme) => {
 			}
 		}
 	}
+	if (preparedData.bg !== undefined) {
+		ctx.drawImage(preparedData.bg.canvas, 0, 0)
+	}
+
 	// let diffY = preparedData.maxY - preparedData.minY
 	// if (diffY === 0) {
 	// 	preparedData.maxY = 1.1
@@ -182,38 +242,72 @@ const drawBackground = (ctx: CanvasRenderingContext2D, theme: Theme) => {
 	// preparedData.map = map
 }
 
-export interface MapDatasets {
+export type MapDatasets = {
 	map: MapDataset
+	traces: Record<string, TraceDataset>
 }
 
 const update = (datasets: MapDatasets) => {
-	console.log('UPdate', datasets)
+	// console.log('UPdate', datasets, preparedData)
 	const g = graph.value
 	if (g !== null) {
-		g.update({
-			map: {
-				...datasets.map,
-				*getDataPoints() {
-					// for (let i = this.data.size() - 1; i >= 0; i--) {
-					// 	const p = this.data.get(i)
-					// 	if (p.x < preparedData.minX) {
-					// 		// console.log(name, i, p.x, p.y, map(p))
-					// 		this.data.removeUpTo(i)
-					// 		break
-					// 	}
-					// 	yield preparedData.map(p)
-					// }
-					for (const x of [0, g.width]) {
-						for (const y of [0, g.height]) {
-							yield { x, y }
+		const update: GraphDatasets<ExtendedMapDataset | ExtendedTraceDataset> =
+			{
+				map: {
+					...datasets.map,
+					*getDataPoints() {
+						// for (let i = this.data.size() - 1; i >= 0; i--) {
+						// 	const p = this.data.get(i)
+						// 	if (p.x < preparedData.minX) {
+						// 		// console.log(name, i, p.x, p.y, map(p))
+						// 		this.data.removeUpTo(i)
+						// 		break
+						// 	}
+						// 	yield preparedData.map(p)
+						// }
+						for (const x of [0, g.width]) {
+							for (const y of [0, g.height]) {
+								yield { x, y }
+							}
 						}
+					},
+					isEmpty() {
+						return false
+					},
+				},
+			}
+		for (const traceName in datasets.traces) {
+			const trace = datasets.traces[traceName]
+			update[traceName] = {
+				...trace,
+				*getDataPoints() {
+					for (let i = this.data.size() - 1; i >= 0; i--) {
+						const p = this.data.get(i)
+						if (p.time < preparedData.latestTime - 20) {
+							// console.log(
+							// 	traceName,
+							// 	i,
+							// 	p.x,
+							// 	p.y,
+							// 	preparedData.map(p),
+							// )
+							this.data.removeUpTo(i)
+							break
+						}
+						yield preparedData.map(p)
 					}
+					// for (const x of [0, g.width]) {
+					// 	for (const y of [0, g.height]) {
+					// 		yield { x, y }
+					// 	}
+					// }
 				},
 				isEmpty() {
-					return false
+					return trace.data.size() == 0
 				},
-			},
-		})
+			} as ExtendedTraceDataset
+		}
+		g.update(update)
 	}
 }
 

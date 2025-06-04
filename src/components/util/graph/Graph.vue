@@ -24,7 +24,11 @@ export type Props<D extends GraphDataset> = {
 	width?: number
 	height?: number
 	legendStyle?: StyleValue
-	drawBackground(ctx: CanvasRenderingContext2D, theme: Theme): void
+	drawBackground(
+		ctx: CanvasRenderingContext2D,
+		theme: Theme,
+		useCache?: boolean,
+	): void
 	prepare(ctx: CanvasRenderingContext2D): void
 	prepareDataset(name: string, dataset: D): void
 }
@@ -84,6 +88,7 @@ function paintGraph(
 	ctx: CanvasRenderingContext2D,
 	theme: Theme,
 	datasetsLength?: number,
+	useCache: boolean = true,
 ) {
 	const newLegend = new Array<LegendItem>(
 		datasetsLength ?? Object.keys(datasets).length,
@@ -110,7 +115,7 @@ function paintGraph(
 
 	ctx.clearRect(0, 0, width.value, height.value)
 
-	props.drawBackground(ctx, theme)
+	props.drawBackground(ctx, theme, useCache)
 
 	ctx.lineWidth = 1
 	for (const name in datasets) {
@@ -118,7 +123,9 @@ function paintGraph(
 		if (dataset.isEmpty()) continue
 
 		const gen = dataset.getDataPoints()
-		const startPoint = gen.next().value!
+		const next = gen.next()
+		if (next.done) continue
+		const startPoint = next.value
 		// const lastMapped = map(dataset.data.get(dataset.data.size() - 1))
 
 		ctx.strokeStyle = dataset.color // 'rgb(255, 0, 0)'
@@ -167,7 +174,7 @@ function save() {
 	if (!lastDatasets.value) return
 	const svgCtx = new C2S(width.value, height.value)
 
-	paintGraph(lastDatasets.value, svgCtx, LIGHT_THEME)
+	paintGraph(lastDatasets.value, svgCtx, LIGHT_THEME, undefined, false)
 
 	const svgString = svgCtx.getSerializedSvg()
 	const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })

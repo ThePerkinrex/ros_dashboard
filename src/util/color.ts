@@ -46,7 +46,7 @@ function* hueToTones(hue: Fraction): Generator<HSV, void, undefined> {
 	}
 }
 
-type RGB = { r: number; g: number; b: number }
+export type RGB = { r: number; g: number; b: number; a: number }
 type HSV = { h: number; s: number; v: number }
 
 function HSVtoRGB(hsv: HSV): RGB {
@@ -83,16 +83,21 @@ function HSVtoRGB(hsv: HSV): RGB {
 		r: Math.round(r * 255),
 		g: Math.round(g * 255),
 		b: Math.round(b * 255),
+		a: 1,
 	}
 }
 
-export function* cssColors(): Generator<string, never, undefined> {
+export function* rgbColors(): Generator<RGB, never, undefined> {
 	const g = fracs()
 	while (true) {
 		const f = g.next().value
 		for (const hsv of hueToTones(f)) {
 			const rgb = HSVtoRGB(hsv)
-			yield `rgb(${rgb.r},${rgb.g},${rgb.b})`
+			yield rgb
 		}
 	}
+}
+
+export function rgbToCSS(color: RGB) {
+	return `rgba(${color.r},${color.g},${color.b},${color.a})`
 }

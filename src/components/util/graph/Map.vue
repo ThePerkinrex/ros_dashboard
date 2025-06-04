@@ -7,7 +7,10 @@ import Graph, {
 	type ExposedGraph,
 	type GraphDataset,
 	type GraphDatasets,
+	type GraphPoint,
+	type RegularColor,
 	type Theme,
+	type TransparentColor,
 } from './Graph.vue'
 import type OccupancyGrid from '@/ros/data/nav_msgs/OccupancyGrid'
 import map from '@/util/map'
@@ -20,27 +23,35 @@ type Point = {
 export type MapDataset = {
 	type: 'map'
 	map: OccupancyGrid
-	color: string
+	color: RegularColor
 }
 
 export type TraceDataset = {
 	type: 'trace'
 	data: CircularBuffer<{ x: number; y: number; time: number }>
-	color: string
+	color: TransparentColor
+}
+
+export type PathDataset = {
+	type: 'trace'
+	data: Array<{ x: number; y: number; speed: number }>
+	color: RegularColor
 }
 
 type ExtendedMapDataset = MapDataset & GraphDataset
 type ExtendedTraceDataset = TraceDataset & GraphDataset
+type ExtendedPathDataset = PathDataset & GraphDataset
 
 export type MapData = {
 	width?: number
 	height?: number
+	timeout: number
 }
 
 const props = defineProps<MapData>()
 
 const graph = ref<ExposedGraph<
-	ExtendedMapDataset | ExtendedTraceDataset
+	ExtendedMapDataset | ExtendedTraceDataset | ExtendedPathDataset
 > | null>(null)
 
 let preparedData: {
@@ -178,68 +189,6 @@ const drawBackground = (
 	if (preparedData.bg !== undefined) {
 		ctx.drawImage(preparedData.bg.canvas, 0, 0)
 	}
-
-	// let diffY = preparedData.maxY - preparedData.minY
-	// if (diffY === 0) {
-	// 	preparedData.maxY = 1.1
-	// 	preparedData.minY = -0.1
-	// 	diffY = 1.2
-	// } else {
-	// 	preparedData.maxY += diffY * 0.1
-	// 	preparedData.minY -= diffY * 0.1
-	// 	diffY = preparedData.maxY - preparedData.minY
-	// }
-	// const height = graph.value!.height
-	// const yRatio = height / diffY
-	// const yTicks = getYTicks(diffY, preparedData.minY, preparedData.maxY, ctx)
-	// const margin = 10
-	// const baseX = yTicks.longestTickTextWidth + margin
-	// if (marginLeft.value != baseX) {
-	// 	marginLeft.value = baseX
-	// }
-	// const minX = preparedData.latestX - timeLength.value
-	// const diffX = preparedData.latestX - minX
-	// const xRatio = (graph.value!.width - baseX) / diffX
-	// const map = (p: Point): Point => ({
-	// 	x: (p.x - minX) * xRatio + baseX,
-	// 	y: height - (p.y - preparedData.minY) * yRatio,
-	// })
-	// preparedData.minX = minX
-	// ctx.lineWidth = 1
-	// for (const tick of yTicks.ticks) {
-	// 	ctx.strokeStyle = tick.significant
-	// 		? theme.COLOR_SIGNIFICANT
-	// 		: theme.COLOR_NON_SIGNIFICANT
-	// 	const mapped = map({ x: 0, y: tick.y })
-	// 	ctx.beginPath()
-	// 	ctx.moveTo(baseX, mapped.y)
-	// 	ctx.lineTo(graph.value!.width, mapped.y)
-	// 	ctx.stroke()
-	// 	if (tick.significant) {
-	// 		ctx.fillStyle = theme.COLOR_TICK_TEXT
-	// 		ctx.fillText(tick.text, 5, mapped.y)
-	// 	}
-	// }
-	// // — 4. Fixed-per-second vertical ticks (seconds ago) —
-	// ctx.textBaseline = 'top'
-	// ctx.textAlign = 'center'
-	// const bottomMargin = 15
-	// const totalSecs = Math.floor(timeLength.value)
-	// for (let sAgo = 0; sAgo <= totalSecs; sAgo += 1) {
-	// 	// X in canvas = baseX + (timeLength - sAgo) * xRatio
-	// 	const xC = baseX + (timeLength.value - sAgo) * xRatio
-	// 	// vertical line
-	// 	ctx.strokeStyle = theme.COLOR_SIGNIFICANT
-	// 	ctx.lineWidth = 1
-	// 	ctx.beginPath()
-	// 	ctx.moveTo(xC, 0)
-	// 	ctx.lineTo(xC, height)
-	// 	ctx.stroke()
-	// 	// label = seconds ago
-	// 	ctx.fillStyle = theme.COLOR_TICK_TEXT
-	// 	ctx.fillText(`-${sAgo}s`, xC, height - bottomMargin)
-	// }
-	// preparedData.map = map
 }
 
 export type MapDatasets = {
@@ -283,7 +232,7 @@ const update = (datasets: MapDatasets) => {
 				*getDataPoints() {
 					for (let i = this.data.size() - 1; i >= 0; i--) {
 						const p = this.data.get(i)
-						if (p.time < preparedData.latestTime - 20) {
+						if (p.time < preparedData.latestTime - props.timeout) {
 							// console.log(
 							// 	traceName,
 							// 	i,
@@ -294,7 +243,11 @@ const update = (datasets: MapDatasets) => {
 							this.data.removeUpTo(i)
 							break
 						}
-						yield preparedData.map(p)
+						const prepared: GraphPoint = preparedData.map(p)
+						prepared.extra = {
+							alpha: i / (this.data.size() - 1),
+						}
+						yield prepared
 					}
 					// for (const x of [0, g.width]) {
 					// 	for (const y of [0, g.height]) {

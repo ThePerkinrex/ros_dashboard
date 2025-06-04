@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { cssColors } from '@/util/color'
+import { rgbColors } from '@/util/color'
 import PolarPlot from './PolarPlot.vue'
 
 const plots = ref([Symbol()])
-const colorGen = cssColors()
+const colorGen = rgbColors()
 </script>
 
 <template>

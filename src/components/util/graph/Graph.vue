@@ -3,14 +3,27 @@ import { computed, ref, type Ref, type StyleValue } from 'vue'
 import C2S from 'canvas2svg'
 import playIcon from '@/assets/icons/play.svg'
 import pauseIcon from '@/assets/icons/pause.svg'
+import { rgbToCSS, type RGB } from '@/util/color'
 
 export interface GraphPoint {
 	x: number
 	y: number
+	extra?: any
+}
+export interface RegularColor {
+	color: RGB
+	type: 'regular'
 }
 
+export interface TransparentColor {
+	color: RGB
+	type: 'transparent'
+}
+
+export type Color = RegularColor | TransparentColor
+
 export interface GraphDataset {
-	color: string
+	color: Color
 	getDataPoints(): Iterator<GraphPoint, void, undefined>
 	isEmpty(): boolean
 }
@@ -83,6 +96,37 @@ const legend = ref<LegendItem[]>([])
 
 const paused = ref<boolean>(false)
 
+function getLegendColor(color: Color): string {
+	switch (color.type) {
+		case 'transparent':
+			return rgbToCSS({ ...color.color, a: 255 })
+		case 'regular':
+			return rgbToCSS({ ...color.color, a: 255 })
+		default:
+			break
+	}
+	throw new Error('Unexpected color type')
+}
+
+function getDatasetColoring(
+	color: Exclude<Color, RegularColor>,
+): (p: GraphPoint) => string {
+	switch (color.type) {
+		case 'transparent':
+			return (p) => {
+				return rgbToCSS({
+					...color.color,
+					a: (p.extra ?? {}).alpha ?? 1,
+				})
+			}
+			break
+
+		default:
+			break
+	}
+	throw new Error('Unexpected color type')
+}
+
 function paintGraph(
 	datasets: GraphDatasets<D>,
 	ctx: CanvasRenderingContext2D,
@@ -100,7 +144,7 @@ function paintGraph(
 	let legendI = 0
 	for (const name in datasets) {
 		const dataset = datasets[name]
-		newLegend[legendI++] = { name, color: dataset.color }
+		newLegend[legendI++] = { name, color: getLegendColor(dataset.color) }
 		if (dataset.isEmpty()) continue
 		props.prepareDataset(name, dataset)
 		validDatasets++
@@ -128,14 +172,27 @@ function paintGraph(
 		const startPoint = next.value
 		// const lastMapped = map(dataset.data.get(dataset.data.size() - 1))
 
-		ctx.strokeStyle = dataset.color // 'rgb(255, 0, 0)'
-		ctx.beginPath()
-		ctx.moveTo(startPoint.x, startPoint.y)
-		// console.log(lastMapped, map(dataset.data[0]))
-		for (let p = gen.next(); p.done !== true; p = gen.next()) {
-			ctx.lineTo(p.value.x, p.value.y)
+		if (dataset.color.type === 'regular') {
+			ctx.strokeStyle = rgbToCSS(dataset.color.color) // 'rgb(255, 0, 0)'
+			ctx.beginPath()
+			ctx.moveTo(startPoint.x, startPoint.y)
+			// console.log(lastMapped, map(dataset.data[0]))
+			for (let p = gen.next(); p.done !== true; p = gen.next()) {
+				ctx.lineTo(p.value.x, p.value.y)
+			}
+			ctx.stroke()
+		} else {
+			const coloring = getDatasetColoring(dataset.color)
+			let prev = startPoint
+			for (let p = gen.next(); p.done !== true; p = gen.next()) {
+				ctx.strokeStyle = coloring(prev) // 'rgb(255, 0, 0)'
+				ctx.beginPath()
+				ctx.moveTo(prev.x, prev.y)
+				ctx.lineTo(p.value.x, p.value.y)
+				ctx.stroke()
+				prev = p.value
+			}
 		}
-		ctx.stroke()
 	}
 }
 

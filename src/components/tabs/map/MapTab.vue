@@ -4,12 +4,12 @@ import Map from '@/components/util/graph/Map.vue'
 import type GetMap from '@/ros/data/nav_msgs/srv/GetMap'
 import { connection_status, ConnectionStatus, Ros } from '@/ros/ros'
 import { RosService } from '@/ros/service'
-import { cssColors } from '@/util/color'
+import { rgbColors } from '@/util/color'
 import { computed, ref, watch } from 'vue'
 import SingleMap from './SingleMap.vue'
 
 const maps = ref([Symbol()])
-const colorGen = cssColors()
+const colorGen = rgbColors()
 </script>
 
 <template>

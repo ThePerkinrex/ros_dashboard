@@ -7,15 +7,15 @@ import type { RosTopic } from '@/ros/topics'
 import type { Topic } from 'roslib'
 import { computed, type ShallowRefMarker } from '@vue/reactivity'
 import { CircularBuffer } from '@/util'
-import { cssColors } from '@/util/color'
+import { rgbColors, type RGB } from '@/util/color'
 import type { MapDatasets } from '@/components/util/graph/Map.vue'
 import Map from '@/components/util/graph/Map.vue'
 
 const props = defineProps<{
-	colorGenerator?: Generator<string, never, undefined>
+	colorGenerator?: Generator<RGB, never, undefined>
 }>()
 
-const defaultColorGen = cssColors()
+const defaultColorGen = rgbColors()
 const colorGenerator = computed(() => props.colorGenerator ?? defaultColorGen)
 
 type TopicData = {
@@ -62,7 +62,7 @@ let datasets: MapDatasets | undefined = undefined
 
 const map = ref<{ update: (datasets: MapDatasets) => void } | null>(null)
 
-function getColor(): string {
+function getColor(): RGB {
 	return colorGenerator.value.next().value
 }
 
@@ -87,7 +87,10 @@ function setMap(t: RosTopic<'nav_msgs/msg/OccupancyGrid'>) {
 					map: {
 						type: 'map',
 						map: m,
-						color: '#0000',
+						color: {
+							type: 'regular',
+							color: { r: 0, g: 0, b: 0, a: 0 },
+						},
 					},
 				}
 				if (map.value !== null) map.value.update(datasets)
@@ -128,7 +131,7 @@ function toggleTrace(
 				(point) => {
 					if (datasets_const.traces[t.getName()] === undefined) {
 						datasets_const.traces[t.getName()] = {
-							color: getColor(),
+							color: { color: getColor(), type: 'transparent' },
 							data: new CircularBuffer(20),
 							type: 'trace',
 						}
@@ -146,8 +149,9 @@ function toggleTrace(
 					if (map.value !== null) map.value.update(datasets_const)
 				},
 				{
-					throttle_rate: 100,
-					queue_length: 1,
+					throttle_rate: 250,
+					queue_length: 0,
+					queue_size: 0,
 				},
 			),
 		}
@@ -158,7 +162,7 @@ function toggleTrace(
 				(point) => {
 					if (datasets_const.traces[t.getName()] === undefined) {
 						datasets_const.traces[t.getName()] = {
-							color: getColor(),
+							color: { color: getColor(), type: 'transparent' },
 							data: new CircularBuffer(20),
 							type: 'trace',
 						}
@@ -176,19 +180,33 @@ function toggleTrace(
 					if (map.value !== null) map.value.update(datasets_const)
 				},
 				{
-					throttle_rate: 100,
-					queue_length: 1,
+					throttle_rate: 250,
+					queue_length: 0,
+					queue_size: 0,
 				},
 			),
 		}
 	}
 }
+
+const timeout = ref<number>(20)
 </script>
 
 <template>
 	<div class="content">
 		<aside>
 			<slot></slot>
+			<div>
+				<input
+					type="range"
+					min="4"
+					max="30"
+					step="0.5"
+					v-model="timeout"
+				/>
+				<span>{{ timeout }} s</span>
+			</div>
+
 			<details open>
 				<summary>Map Topics</summary>
 				<div
@@ -234,7 +252,7 @@ function toggleTrace(
 			</details>
 		</aside>
 		<div class="main">
-			<Map ref="map" />
+			<Map ref="map" :timeout="timeout" />
 		</div>
 	</div>
 </template>

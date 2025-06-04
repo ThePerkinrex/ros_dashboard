@@ -9,13 +9,13 @@ import { computed, type ShallowRefMarker } from '@vue/reactivity'
 import type { PlotDatasets } from '@/components/util/graph/TimeSeries.vue'
 import TimeSeries from '@/components/util/graph/TimeSeries.vue'
 import { CircularBuffer } from '@/util'
-import { cssColors } from '@/util/color'
+import { rgbColors } from '@/util/color'
 
 const props = defineProps<{
 	colorGenerator?: Generator<string, never, undefined>
 }>()
 
-const defaultColorGen = cssColors()
+const defaultColorGen = rgbColors()
 const colorGenerator = computed(() => props.colorGenerator ?? defaultColorGen)
 
 type TopicData = {

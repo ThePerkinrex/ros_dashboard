@@ -5,7 +5,7 @@ import { reactive, ref, shallowRef, watch } from 'vue'
 import type { RosTopic } from '@/ros/topics'
 import type { Topic } from 'roslib'
 import { computed } from '@vue/reactivity'
-import { cssColors } from '@/util/color'
+import { rgbColors } from '@/util/color'
 import InstantPolar, {
 	type PlotDatasets,
 } from '@/components/util/graph/InstantPolar.vue'
@@ -14,7 +14,7 @@ const props = defineProps<{
 	colorGenerator?: Generator<string, never, undefined>
 }>()
 
-const defaultColorGen = cssColors()
+const defaultColorGen = rgbColors()
 const colorGenerator = computed(() => props.colorGenerator ?? defaultColorGen)
 
 type TopicData = {

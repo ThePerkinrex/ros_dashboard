@@ -33,7 +33,7 @@ export type TraceDataset = {
 }
 
 export type PathDataset = {
-	type: 'trace'
+	type: 'path'
 	data: Array<{ x: number; y: number; speed: number }>
 	color: RegularColor
 }
@@ -97,7 +97,7 @@ const triggerRedraw = () => {
 
 const prepareDataset = (
 	name: string,
-	dataset: ExtendedMapDataset | ExtendedTraceDataset,
+	dataset: ExtendedMapDataset | ExtendedTraceDataset | ExtendedPathDataset,
 ) => {
 	const g = graph.value
 	if (g !== null) {
@@ -129,10 +129,11 @@ const prepareDataset = (
 			preparedData.data = dataset.map
 			triggerRedraw()
 			preparedData.ratio = minRatio
-		} else {
+		} else if (dataset.type == 'trace') {
 			const latestInDataset = dataset.data.get(dataset.data.size() - 1)
 			if (latestInDataset.time > preparedData.latestTime)
 				preparedData.latestTime = latestInDataset.time
+		} else if (dataset.type == 'path') {
 		}
 	}
 }
@@ -194,37 +195,39 @@ const drawBackground = (
 export type MapDatasets = {
 	map: MapDataset
 	traces: Record<string, TraceDataset>
+	paths: Record<string, PathDataset>
 }
 
 const update = (datasets: MapDatasets) => {
 	// console.log('UPdate', datasets, preparedData)
 	const g = graph.value
 	if (g !== null) {
-		const update: GraphDatasets<ExtendedMapDataset | ExtendedTraceDataset> =
-			{
-				map: {
-					...datasets.map,
-					*getDataPoints() {
-						// for (let i = this.data.size() - 1; i >= 0; i--) {
-						// 	const p = this.data.get(i)
-						// 	if (p.x < preparedData.minX) {
-						// 		// console.log(name, i, p.x, p.y, map(p))
-						// 		this.data.removeUpTo(i)
-						// 		break
-						// 	}
-						// 	yield preparedData.map(p)
-						// }
-						for (const x of [0, g.width]) {
-							for (const y of [0, g.height]) {
-								yield { x, y }
-							}
+		const update: GraphDatasets<
+			ExtendedMapDataset | ExtendedTraceDataset | ExtendedPathDataset
+		> = {
+			map: {
+				...datasets.map,
+				*getDataPoints() {
+					// for (let i = this.data.size() - 1; i >= 0; i--) {
+					// 	const p = this.data.get(i)
+					// 	if (p.x < preparedData.minX) {
+					// 		// console.log(name, i, p.x, p.y, map(p))
+					// 		this.data.removeUpTo(i)
+					// 		break
+					// 	}
+					// 	yield preparedData.map(p)
+					// }
+					for (const x of [0, g.width]) {
+						for (const y of [0, g.height]) {
+							yield { x, y }
 						}
-					},
-					isEmpty() {
-						return false
-					},
+					}
 				},
-			}
+				isEmpty() {
+					return false
+				},
+			},
+		}
 		for (const traceName in datasets.traces) {
 			const trace = datasets.traces[traceName]
 			update[traceName] = {
@@ -259,6 +262,22 @@ const update = (datasets: MapDatasets) => {
 					return trace.data.size() == 0
 				},
 			} as ExtendedTraceDataset
+		}
+		for (const pathName in datasets.paths) {
+			const path = datasets.paths[pathName]
+			update[pathName] = {
+				...path,
+				*getDataPoints() {
+					for (let i = this.data.length - 1; i >= 0; i--) {
+						const p = this.data[i]
+						const prepared: GraphPoint = preparedData.map(p)
+						yield prepared
+					}
+				},
+				isEmpty() {
+					return path.data.length == 0
+				},
+			} as ExtendedPathDataset
 		}
 		g.update(update)
 	}

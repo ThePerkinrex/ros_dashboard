@@ -3,7 +3,7 @@ import { connection_status, ConnectionStatus, Ros } from '@/ros/ros'
 import { reactive, ref, shallowRef, watch } from 'vue'
 import type { RosParam } from '@/ros/params'
 
-import type { RosTopic } from '@/ros/topics'
+import { RosTopic } from '@/ros/topics'
 import type { Topic } from 'roslib'
 import { computed, type ShallowRefMarker } from '@vue/reactivity'
 import { CircularBuffer } from '@/util'
@@ -32,6 +32,7 @@ const mapTopics = ref<RosTopic<'nav_msgs/msg/OccupancyGrid'>[]>([])
 const pointTopics = ref<
 	RosTopic<'geometry_msgs/msg/PointStamped' | 'nav_msgs/msg/Odometry'>[]
 >([])
+const pathTopics = ref<RosTopic<'nav_msgs/msg/Path'>[]>([])
 
 watch(
 	connection_status,
@@ -52,6 +53,9 @@ watch(
 				(t) =>
 					t.is('geometry_msgs/msg/PointStamped') ||
 					t.is('nav_msgs/msg/Odometry'),
+			)
+			pathTopics.value = (await ros.getTopics()).filter((t) =>
+				t.is('nav_msgs/msg/Path'),
 			)
 		}
 	},
@@ -83,7 +87,7 @@ function setMap(t: RosTopic<'nav_msgs/msg/OccupancyGrid'>) {
 				console.log('Received value: ', m)
 
 				datasets = {
-					...(datasets || { traces: {} }),
+					...(datasets || { traces: {}, paths: {} }),
 					map: {
 						type: 'map',
 						map: m,
@@ -108,6 +112,14 @@ let traces: Record<
 		rostopic: RosTopic<
 			'geometry_msgs/msg/PointStamped' | 'nav_msgs/msg/Odometry'
 		>
+		subscription: Topic
+	}
+> = {}
+
+let paths: Record<
+	string,
+	{
+		rostopic: RosTopic<'nav_msgs/msg/Path'>
 		subscription: Topic
 	}
 > = {}
@@ -189,6 +201,53 @@ function toggleTrace(
 	}
 }
 
+function togglePath(t: RosTopic<'nav_msgs/msg/Path'>) {
+	console.log('Path toggled', t.getName(), paths, datasets)
+	const datasets_const = datasets
+	if (datasets_const === undefined) {
+		return
+	}
+	const path = paths[t.getName()]
+	if (path !== undefined) {
+		path.rostopic.unsubscribe(path.subscription)
+		if (datasets_const.paths[t.getName()] === undefined) {
+			datasets_const.paths[t.getName()] = {
+				color: { color: getColor(), type: 'regular' },
+				data: [],
+				type: 'path',
+			}
+		}
+		// console.log(d)
+		datasets_const.paths[t.getName()]!.data = []
+
+		if (map.value !== null) map.value.update(datasets_const)
+		delete paths[t.getName()]
+	} else {
+		paths[t.getName()] = {
+			rostopic: t,
+			subscription: t.subscribe((path) => {
+				if (datasets_const.paths[t.getName()] === undefined) {
+					datasets_const.paths[t.getName()] = {
+						color: { color: getColor(), type: 'regular' },
+						data: [],
+						type: 'path',
+					}
+				}
+				// console.log(d)
+				datasets_const.paths[t.getName()]!.data = path.poses.map(
+					(p) => ({
+						x: p.pose.position.x,
+						y: p.pose.position.y,
+						speed: 1,
+					}),
+				)
+
+				if (map.value !== null) map.value.update(datasets_const)
+			}),
+		}
+	}
+}
+
 const timeout = ref<number>(20)
 </script>
 
@@ -243,6 +302,25 @@ const timeout = ref<number>(20)
 							toggleTrace(
 								topic as RosTopic<'geometry_msgs/msg/PointStamped'>,
 							)
+						"
+					/>
+					<label :for="'point-' + topic.getName()">{{
+						topic.getName()
+					}}</label>
+				</div>
+			</details>
+			<details open>
+				<summary>Path Topics</summary>
+				<div
+					class="topic"
+					v-for="topic in pathTopics"
+					:key="topic.getName()"
+				>
+					<input
+						type="checkbox"
+						:id="'point-' + topic.getName()"
+						@change="
+							togglePath(topic as RosTopic<'nav_msgs/msg/Path'>)
 						"
 					/>
 					<label :for="'point-' + topic.getName()">{{

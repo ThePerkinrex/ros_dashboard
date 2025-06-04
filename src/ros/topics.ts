@@ -3,6 +3,7 @@ import { ros_singleton } from './ros'
 import type OccupancyGrid from './data/nav_msgs/OccupancyGrid'
 import type PointStamped from './data/geometry_msgs/msg/PointStamped'
 import type Odometry from './data/nav_msgs/msg/Odometry'
+import type Path from './data/nav_msgs/msg/Path'
 
 export interface PlottableMapping {
 	[name: string]: Record<string, (x: any) => number>
@@ -64,6 +65,7 @@ export interface KnownRosTopicTypes {
 	'nav_msgs/msg/OccupancyGrid': OccupancyGrid
 	'geometry_msgs/msg/PointStamped': PointStamped
 	'nav_msgs/msg/Odometry': Odometry
+	'nav_msgs/msg/Path': Path
 	// …other specific mappings…
 }
 

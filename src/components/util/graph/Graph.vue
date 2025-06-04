@@ -1,5 +1,12 @@
 <script setup lang="ts" generic="D extends GraphDataset">
-import { computed, ref, type Ref, type StyleValue } from 'vue'
+import {
+	computed,
+	onMounted,
+	onUnmounted,
+	ref,
+	type Ref,
+	type StyleValue,
+} from 'vue'
 import C2S from 'canvas2svg'
 import playIcon from '@/assets/icons/play.svg'
 import pauseIcon from '@/assets/icons/pause.svg'
@@ -95,6 +102,13 @@ type LegendItem = { name: string; color: string }
 const legend = ref<LegendItem[]>([])
 
 const paused = ref<boolean>(false)
+
+const zoom = ref(1)
+const offsetX = ref(0)
+const offsetY = ref(0)
+
+const isDragging = ref(false)
+const lastMouse = ref({ x: 0, y: 0 })
 
 function getLegendColor(color: Color): string {
 	switch (color.type) {
@@ -205,7 +219,14 @@ const update = (datasets: GraphDatasets<D>) => {
 	if (paused.value) return
 	lastDatasets.value = datasets
 
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	ctx.clearRect(0, 0, width.value, height.value)
+
+	ctx.save()
+	ctx.translate(offsetX.value, offsetY.value)
+	ctx.scale(zoom.value, zoom.value)
 	paintGraph(datasets, ctx, DARK_THEME, datasetsLength)
+	ctx.restore()
 }
 
 const width = computed(() => props.width ?? 600)
@@ -244,6 +265,71 @@ function save() {
 	document.body.removeChild(a)
 	URL.revokeObjectURL(url)
 }
+
+// ─── ZOOM / PAN HANDLERS ─────────────────────────────────
+
+function clamp(v: number, min: number, max: number) {
+	return v < min ? min : v > max ? max : v
+}
+
+function onWheel(event: WheelEvent) {
+	event.preventDefault()
+	if (!canvas.value) return
+	const rect = canvas.value.getBoundingClientRect()
+	const mouseX = event.clientX - rect.left
+	const mouseY = event.clientY - rect.top
+
+	const xInGraph = (mouseX - offsetX.value) / zoom.value
+	const yInGraph = (mouseY - offsetY.value) / zoom.value
+
+	const delta = -event.deltaY * 0.001
+	const newZoom = clamp(zoom.value * (1 + delta), 0.1, 10)
+
+	zoom.value = newZoom
+	offsetX.value = mouseX - xInGraph * zoom.value
+	offsetY.value = mouseY - yInGraph * zoom.value
+
+	// if (lastDatasets.value) update(lastDatasets.value)
+}
+
+function onMouseDown(event: MouseEvent) {
+	isDragging.value = true
+	lastMouse.value = { x: event.clientX, y: event.clientY }
+}
+
+function onMouseMove(event: MouseEvent) {
+	if (!isDragging.value) return
+	const dx = event.clientX - lastMouse.value.x
+	const dy = event.clientY - lastMouse.value.y
+	lastMouse.value = { x: event.clientX, y: event.clientY }
+
+	offsetX.value += dx
+	offsetY.value += dy
+
+	// if (lastDatasets.value) update(lastDatasets.value)
+}
+
+function onMouseUp() {
+	isDragging.value = false
+}
+
+onMounted(() => {
+	if (canvas.value) {
+		canvas.value.addEventListener('wheel', onWheel, { passive: false })
+		canvas.value.addEventListener('mousedown', onMouseDown)
+		window.addEventListener('mousemove', onMouseMove)
+		window.addEventListener('mouseup', onMouseUp)
+	}
+})
+
+onUnmounted(() => {
+	if (canvas.value) {
+		canvas.value.removeEventListener('wheel', onWheel)
+		canvas.value.removeEventListener('mousedown', onMouseDown)
+		window.removeEventListener('mousemove', onMouseMove)
+		window.removeEventListener('mouseup', onMouseUp)
+	}
+})
 </script>
 
 <template>

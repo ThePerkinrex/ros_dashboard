@@ -12,6 +12,8 @@ import PolarPlotsTabTitle from './components/tabs/polarPlots/PolarPlotsTabTitle.
 import PolarPlotsTab from './components/tabs/polarPlots/PolarPlotsTab.vue'
 import MapTabTitle from './components/tabs/map/MapTabTitle.vue'
 import MapTab from './components/tabs/map/MapTab.vue'
+import PathTabTitle from './components/tabs/path/PathTabTitle.vue'
+import PathTab from './components/tabs/path/PathTab.vue'
 
 const ros = new Ros()
 
@@ -38,6 +40,7 @@ ros.setURL(url.value)
 					{ title: PlotsTabTitle, content: PlotsTab },
 					{ title: PolarPlotsTabTitle, content: PolarPlotsTab },
 					{ title: MapTabTitle, content: MapTab },
+					{ title: PathTabTitle, content: PathTab },
 				]"
 			/>
 		</main>

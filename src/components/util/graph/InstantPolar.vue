@@ -6,6 +6,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import Graph, {
 	type ExposedGraph,
 	type GraphDataset,
+	type RegularColor,
 	type Theme,
 } from './Graph.vue'
 
@@ -20,7 +21,7 @@ export type PolarPoint = {
 
 export type PlotDataset = {
 	data: Array<PolarPoint>
-	color: string
+	color: RegularColor
 }
 
 type ExtendedPlotDataset = PlotDataset & GraphDataset

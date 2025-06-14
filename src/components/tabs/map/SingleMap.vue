@@ -243,7 +243,7 @@ function togglePath(t: RosTopic<'nav_msgs/msg/Path'>) {
 				)
 
 				if (map.value !== null) map.value.update(datasets_const)
-			}),
+			}, {}),
 		}
 	}
 }

@@ -5,13 +5,13 @@ import { reactive, ref, shallowRef, watch } from 'vue'
 import type { RosTopic } from '@/ros/topics'
 import type { Topic } from 'roslib'
 import { computed } from '@vue/reactivity'
-import { rgbColors } from '@/util/color'
+import { rgbColors, type RGB } from '@/util/color'
 import InstantPolar, {
 	type PlotDatasets,
 } from '@/components/util/graph/InstantPolar.vue'
 
 const props = defineProps<{
-	colorGenerator?: Generator<string, never, undefined>
+	colorGenerator?: Generator<RGB, never, undefined>
 }>()
 
 const defaultColorGen = rgbColors()
@@ -44,7 +44,7 @@ const plot = ref<{ update: (datasets: PlotDatasets) => void } | null>(null)
 const minAngle = ref(0)
 const maxAngle = ref(Math.PI * 2)
 
-function getColor(): string {
+function getColor(): RGB {
 	return colorGenerator.value.next().value
 }
 
@@ -56,7 +56,7 @@ function toggleDataset(t: TopicData) {
 		const id = t.rosTopic.getName()
 		datasets[id] = {
 			data: [],
-			color: color,
+			color: { type: 'regular', color },
 		}
 		t.subscription = {
 			subscribed: t.rosTopic.subscribePolarPlot(

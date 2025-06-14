@@ -9,10 +9,10 @@ import { computed, type ShallowRefMarker } from '@vue/reactivity'
 import type { PlotDatasets } from '@/components/util/graph/TimeSeries.vue'
 import TimeSeries from '@/components/util/graph/TimeSeries.vue'
 import { CircularBuffer } from '@/util'
-import { rgbColors } from '@/util/color'
+import { rgbColors, type RGB } from '@/util/color'
 
 const props = defineProps<{
-	colorGenerator?: Generator<string, never, undefined>
+	colorGenerator?: Generator<RGB, never, undefined>
 }>()
 
 const defaultColorGen = rgbColors()
@@ -85,7 +85,7 @@ const datasets: PlotDatasets = {}
 
 const plot = ref<{ update: (datasets: PlotDatasets) => void } | null>(null)
 
-function getColor(): string {
+function getColor(): RGB {
 	return colorGenerator.value.next().value
 }
 
@@ -97,7 +97,7 @@ function toggleDataset(t: TopicData) {
 		const id = t.rosTopic.getName()
 		datasets[id] = {
 			data: new CircularBuffer(),
-			color: color,
+			color: { type: 'regular', color },
 		}
 		t.subscription = {
 			subscribed: t.rosTopic.subscribePlot(t.key, (data) => {

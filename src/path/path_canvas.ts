@@ -19,6 +19,7 @@ export interface IPathCanvas {
 	drawBackground(): void
 	canvasToMap(x: number): number
 	canvasToMap(p: Point): Point
+	mapToCanvas(p: Point): Point
 	onPointerDown(handler: PointerEventHandler): void
 	onPointerUp(handler: PointerEventHandler): void
 	onPointerMove(handler: PointerEventHandler): void
@@ -132,6 +133,17 @@ export class PathCanvas implements IPathCanvas {
 			y:
 				(p.y / this.scale - this.imgHeight / 2 + this.origin.y) *
 				this.resolution,
+		}
+	}
+
+	mapToCanvas(p: Point): Point {
+		return {
+			x:
+				(p.x / this.resolution + this.imgWidth / 2 + this.origin.x) *
+				this.scale,
+			y:
+				(p.y / this.resolution - this.imgHeight / 2 + this.origin.y) *
+				this.scale,
 		}
 	}
 

@@ -3,6 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import * as yaml from 'js-yaml'
 import { PathCanvas } from '@/path/path_canvas'
 import { PathDrawer } from '@/path/path_drawer'
+import type { SampledPathPreview } from '@/path/sampled_path_preview'
 
 interface MapYaml {
 	freeThres: number
@@ -16,6 +17,7 @@ interface MapYaml {
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
+const sampled = ref<SampledPathPreview | null>(null)
 
 const pathCanvas = new PathCanvas(canvasRef, containerRef)
 let pathDrawer: PathDrawer | null = new PathDrawer(pathCanvas)
@@ -47,6 +49,13 @@ onMounted(() => {
 					accept="image/*,.pgm"
 				/>
 			</label>
+			<button @click="sampled = pathDrawer.asPath()">Sample</button>
+			<button
+				v-if="sampled !== null"
+				@click="((sampled = null), pathDrawer.hideSampled())"
+			>
+				Hide
+			</button>
 		</div>
 		<canvas ref="canvasRef" class="image-canvas"></canvas>
 	</div>

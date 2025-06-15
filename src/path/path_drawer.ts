@@ -1,6 +1,12 @@
 import { drawColoredBezier } from './bezier'
 import { CurvatureColoring } from './curvature_coloring'
 import type { IPathCanvas, Point } from './path_canvas'
+import { SampledPathPreview } from './sampled_path_preview'
+
+export interface SavedPath {
+	loopFinished: boolean
+	points: Point[]
+}
 
 export class PathDrawer {
 	private shouldUpdate = false
@@ -16,6 +22,8 @@ export class PathDrawer {
 	private selectedPointIndex: number | null = null
 	// New: radius (in px) within which you can grab a point
 	private snapRadius = 6
+
+	private sampled: SampledPathPreview | null = null
 
 	constructor(private canvas: IPathCanvas) {
 		canvas.onLoadOrResize(() => {
@@ -333,6 +341,11 @@ export class PathDrawer {
 			}
 		}
 
+		const sampled = this.sampled
+		if (sampled !== null) {
+			sampled.draw(ctx)
+		}
+
 		let mouse = this.mouse
 		ctx.strokeStyle = this.shiftDown ? 'green' : 'blue'
 		if (!this.shiftDown) {
@@ -348,5 +361,127 @@ export class PathDrawer {
 		ctx.beginPath()
 		ctx.arc(mouse.x, mouse.y, radius / 3, 0, Math.PI * 2)
 		ctx.stroke()
+	}
+
+	public save(): SavedPath {
+		return {
+			loopFinished: this.loopFinished,
+			points: this.points.map((p) => this.canvas.canvasToMap(p)),
+		}
+	}
+
+	public load(p: SavedPath) {
+		this.loopFinished = p.loopFinished
+		this.points = p.points.map((p) => this.canvas.mapToCanvas(p))
+		this.shouldUpdate = true
+	}
+
+	public hideSampled() {
+		this.sampled = null
+		this.shouldUpdate = true
+	}
+
+	public asPath(sampleDist: number = 5): SampledPathPreview | null {
+		const orig = this.points.slice()
+		if (orig.length < 4) return null
+
+		// build full bezier control list (pts)
+		const pts: Point[] = []
+		// first segment
+		pts.push(orig[0], orig[1], orig[2], orig[3])
+		// subsequent segments
+		for (let i = 4; i + 1 < orig.length; i += 2) {
+			const prevAnchor = pts[pts.length - 1]
+			const prevCp2 = pts[pts.length - 2]
+			const cp1: Point = {
+				x: prevAnchor.x * 2 - prevCp2.x,
+				y: prevAnchor.y * 2 - prevCp2.y,
+			}
+			pts.push(cp1, orig[i], orig[i + 1])
+		}
+
+		// collect cubic segments
+		interface Segment {
+			p0: Point
+			p1: Point
+			p2: Point
+			p3: Point
+		}
+		const segments: Segment[] = []
+		for (let i = 0; i + 3 < pts.length; i += 3) {
+			segments.push({
+				p0: pts[i],
+				p1: pts[i + 1],
+				p2: pts[i + 2],
+				p3: pts[i + 3],
+			})
+		}
+
+		// closing segment
+		if (this.loopFinished) {
+			const firstAnchor = pts[0]
+			const firstCp1 = pts[1]
+			const lastLen = pts.length
+			const lastAnchor = pts[lastLen - 1]
+			const lastCp2 = pts[lastLen - 2]
+			const cp1Closure = {
+				x: lastAnchor.x * 2 - lastCp2.x,
+				y: lastAnchor.y * 2 - lastCp2.y,
+			}
+			const cp2Closure = {
+				x: firstAnchor.x * 2 - firstCp1.x,
+				y: firstAnchor.y * 2 - firstCp1.y,
+			}
+			segments.push({
+				p0: lastAnchor,
+				p1: cp1Closure,
+				p2: cp2Closure,
+				p3: firstAnchor,
+			})
+		}
+
+		// helper to get point on cubic at t
+		const cubicPoint = (seg: Segment, t: number): Point => {
+			const u = 1 - t
+			const w1 = u * u * u
+			const w2 = 3 * u * u * t
+			const w3 = 3 * u * t * t
+			const w4 = t * t * t
+			return {
+				x:
+					seg.p0.x * w1 +
+					seg.p1.x * w2 +
+					seg.p2.x * w3 +
+					seg.p3.x * w4,
+				y:
+					seg.p0.y * w1 +
+					seg.p1.y * w2 +
+					seg.p2.y * w3 +
+					seg.p3.y * w4,
+			}
+		}
+
+		const samples: Point[] = []
+		// sample each segment
+		for (const seg of segments) {
+			// approximate length by control polygon
+			const len =
+				Math.hypot(seg.p0.x - seg.p1.x, seg.p0.y - seg.p1.y) +
+				Math.hypot(seg.p1.x - seg.p2.x, seg.p1.y - seg.p2.y) +
+				Math.hypot(seg.p2.x - seg.p3.x, seg.p2.y - seg.p3.y)
+			const steps = Math.max(1, Math.ceil(len / sampleDist))
+			for (let i = 0; i < steps; i++) {
+				const t = i / steps
+				samples.push(cubicPoint(seg, t))
+			}
+		}
+
+		// convert to map coordinates
+		this.sampled = new SampledPathPreview(
+			samples,
+			samples.map((p) => this.canvas.canvasToMap(p)),
+		)
+		this.shouldUpdate = true
+		return this.sampled
 	}
 }

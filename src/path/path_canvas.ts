@@ -1,5 +1,6 @@
 import { type Ref, ref, watch } from 'vue'
 import * as yaml from 'js-yaml'
+import { KeyManager } from './key_manager'
 
 interface MapYaml {
 	freeThres: number
@@ -16,6 +17,7 @@ type PointerEventHandler = (position: Point) => void
 export interface IPathCanvas {
 	getContext(): CanvasRenderingContext2D | null
 	drawBackground(): void
+	canvasToMap(x: number): number
 	canvasToMap(p: Point): Point
 	onPointerDown(handler: PointerEventHandler): void
 	onPointerUp(handler: PointerEventHandler): void
@@ -23,6 +25,7 @@ export interface IPathCanvas {
 	onPointerEnter(handler: PointerEventHandler): void
 	onPointerleave(handler: PointerEventHandler): void
 	onLoadOrResize(handler: () => void): void
+	getKeyManager(): KeyManager
 }
 
 function toPointerEvtHandler(
@@ -58,6 +61,7 @@ export class PathCanvas implements IPathCanvas {
 	private origin: Point = { x: 0, y: 0 }
 	private onCanvasLoadOrResize: (() => void)[] = []
 	private hasRedrawn = false
+	private keyManager = new KeyManager()
 
 	constructor(
 		private canvasRef: Ref<HTMLCanvasElement | null>,
@@ -68,6 +72,14 @@ export class PathCanvas implements IPathCanvas {
 			() => this.redraw(),
 			{ flush: 'post' },
 		)
+
+		document.addEventListener('keydown', (e) =>
+			this.keyManager.onKeyDown(e),
+		)
+		document.addEventListener('keyup', (e) => this.keyManager.onKeyUp(e))
+	}
+	getKeyManager(): KeyManager {
+		return this.keyManager
 	}
 
 	onPointerDown(handler: PointerEventHandler): void {
@@ -105,7 +117,14 @@ export class PathCanvas implements IPathCanvas {
 		this.onCanvasLoadOrResize.push(handler)
 	}
 
-	public canvasToMap(p: Point): Point {
+	private scalarScaleCanvasToMap(x: number): number {
+		return (x / this.scale) * this.resolution
+	}
+
+	public canvasToMap(p: number): number
+	public canvasToMap(p: Point): Point
+	public canvasToMap(p: Point | number): Point | number {
+		if (typeof p === 'number') return this.scalarScaleCanvasToMap(p)
 		return {
 			x:
 				(p.x / this.scale - this.imgWidth / 2 + this.origin.x) *
@@ -255,7 +274,8 @@ export class PathCanvas implements IPathCanvas {
 	 */
 	public drawBackground(): void {
 		if (!this.offscreenCanvas) return
-		const ctx = this.getContext()!
+		const ctx = this.getContext()
+		if (!ctx) return
 		// apply the precomputed scale
 		ctx.scale(this.scale, this.scale)
 		ctx.imageSmoothingEnabled = false

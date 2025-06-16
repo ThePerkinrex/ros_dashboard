@@ -25,7 +25,8 @@ export interface IPathCanvas {
 	onPointerMove(handler: PointerEventHandler): void
 	onPointerEnter(handler: PointerEventHandler): void
 	onPointerleave(handler: PointerEventHandler): void
-	onLoadOrResize(handler: () => void): void
+	onBeforeLoadOrResize(handler: () => boolean): void
+	onAfterLoadOrResize(handler: () => boolean): void
 	getKeyManager(): KeyManager
 }
 
@@ -50,8 +51,8 @@ export interface Point {
 export class PathCanvas implements IPathCanvas {
 	// reactive state
 	public yamlContent = ref<MapYaml | null>(null)
-	public pgmFile = ref<File | null>(null)
-	public imageUrl = ref<string | null>(null)
+	private pgmDataUrl = ref<string | null>(null)
+	private imageUrl = ref<string | null>(null)
 
 	// offscreen buffer for background (image + axes)
 	private offscreenCanvas: HTMLCanvasElement | null = null
@@ -60,7 +61,8 @@ export class PathCanvas implements IPathCanvas {
 	private scale = 1
 	private resolution = 1
 	private origin: Point = { x: 0, y: 0 }
-	private onCanvasLoadOrResize: (() => void)[] = []
+	private onAfterCanvasLoadOrResize: (() => boolean)[] = []
+	private onBeforeCanvasLoadOrResize: (() => boolean)[] = []
 	private hasRedrawn = false
 	private keyManager = new KeyManager()
 
@@ -69,7 +71,7 @@ export class PathCanvas implements IPathCanvas {
 		private containerRef: Ref<HTMLDivElement | null>,
 	) {
 		watch(
-			[this.yamlContent, this.pgmFile, this.imageUrl],
+			[this.yamlContent, this.pgmDataUrl, this.imageUrl],
 			() => this.redraw(),
 			{ flush: 'post' },
 		)
@@ -79,6 +81,22 @@ export class PathCanvas implements IPathCanvas {
 		)
 		document.addEventListener('keyup', (e) => this.keyManager.onKeyUp(e))
 	}
+
+	public load() {
+		const yaml = localStorage.getItem('mapYaml')
+		if (yaml !== null) {
+			this.loadYamlString(yaml)
+		}
+		const pgm = localStorage.getItem('mapPgm')
+		if (pgm !== null) {
+			this.pgmDataUrl.value = pgm
+		}
+		const image = localStorage.getItem('mapImage')
+		if (image !== null) {
+			this.imageUrl.value = image
+		}
+	}
+
 	getKeyManager(): KeyManager {
 		return this.keyManager
 	}
@@ -113,9 +131,12 @@ export class PathCanvas implements IPathCanvas {
 			toPointerEvtHandler(this.canvasRef.value!, handler),
 		)
 	}
-	onLoadOrResize(handler: () => void): void {
-		if (this.hasRedrawn) handler()
-		this.onCanvasLoadOrResize.push(handler)
+	onBeforeLoadOrResize(handler: () => boolean): void {
+		this.onBeforeCanvasLoadOrResize.push(handler)
+	}
+	onAfterLoadOrResize(handler: () => boolean): void {
+		if (!(this.hasRedrawn && handler()))
+			this.onAfterCanvasLoadOrResize.push(handler)
 	}
 
 	private scalarScaleCanvasToMap(x: number): number {
@@ -137,13 +158,28 @@ export class PathCanvas implements IPathCanvas {
 	}
 
 	mapToCanvas(p: Point): Point {
+		console.log(this)
 		return {
 			x:
-				(p.x / this.resolution + this.imgWidth / 2 + this.origin.x) *
+				(p.x / this.resolution + this.imgWidth / 2 - this.origin.x) *
 				this.scale,
 			y:
-				(p.y / this.resolution - this.imgHeight / 2 + this.origin.y) *
+				(p.y / this.resolution + this.imgHeight / 2 - this.origin.y) *
 				this.scale,
+		}
+	}
+
+	private loadYamlString(s: string) {
+		try {
+			this.yamlContent.value = yaml.load(s) as MapYaml
+			this.resolution = this.yamlContent.value.resolution
+			this.origin = {
+				x: this.yamlContent.value.origin[0],
+				y: this.yamlContent.value.origin[1],
+			}
+			localStorage.setItem('mapYaml', s)
+		} catch (err) {
+			console.error('YAML parse error', err)
 		}
 	}
 
@@ -153,32 +189,33 @@ export class PathCanvas implements IPathCanvas {
 
 		const reader = new FileReader()
 		reader.onload = (evt) => {
-			try {
-				this.yamlContent.value = yaml.load(
-					evt.target?.result as string,
-				) as MapYaml
-				this.resolution = this.yamlContent.value.resolution
-				this.origin = {
-					x: this.yamlContent.value.origin[0],
-					y: this.yamlContent.value.origin[1],
-				}
-			} catch (err) {
-				console.error('YAML parse error', err)
-			}
+			this.loadYamlString(evt.target?.result as string)
 		}
 		reader.readAsText(files[0])
 	}
 
 	public handleImageChange(e: Event): void {
-		const files = (e.target as HTMLInputElement).files
-		if (!files?.[0]) return
+		const file = (e.target as HTMLInputElement).files?.[0]
+		if (!file) return
 
-		const file = files[0]
-		if (file.name.endsWith('.pgm')) {
-			this.pgmFile.value = file
-		} else {
-			this.imageUrl.value = URL.createObjectURL(file)
+		const reader = new FileReader()
+		reader.onload = () => {
+			// will be something like "data:image/png;base64,...."
+			const dataUrl = reader.result as string
+
+			if (file.name.endsWith('.pgm')) {
+				// store the PGM data URL
+				this.pgmDataUrl.value = dataUrl
+				localStorage.setItem('mapPgm', dataUrl)
+			} else {
+				// store the normal image data URL
+				this.imageUrl.value = dataUrl
+				localStorage.setItem('mapImage', dataUrl)
+			}
 		}
+
+		// read everything as DataURL
+		reader.readAsDataURL(file)
 	}
 
 	public getContext(): CanvasRenderingContext2D | null {
@@ -195,10 +232,12 @@ export class PathCanvas implements IPathCanvas {
 	 */
 	public async redraw(): Promise<void> {
 		if (!this.yamlContent.value) return
+
+		this.onBeforeCanvasLoadOrResize.filter((h) => h())
 		await this.createBackground() // compute scale + set sizes once
 		await this.drawBackground()
 		this.hasRedrawn = true
-		this.onCanvasLoadOrResize.forEach((h) => h())
+		this.onAfterCanvasLoadOrResize.filter((h) => h())
 	}
 
 	/**
@@ -209,8 +248,8 @@ export class PathCanvas implements IPathCanvas {
 		let width = 0,
 			height = 0
 
-		if (this.pgmFile.value) {
-			const pgm = await this.loadPGM(this.pgmFile.value)
+		if (this.pgmDataUrl.value) {
+			const pgm = await this.loadPGM(this.pgmDataUrl.value)
 			width = pgm.width
 			height = pgm.height
 		} else if (this.imageUrl.value) {
@@ -236,9 +275,16 @@ export class PathCanvas implements IPathCanvas {
 		this.imgWidth = width
 		this.imgHeight = height
 
-		if (this.pgmFile.value) {
-			const pgm = await this.loadPGM(this.pgmFile.value)
+		if (this.pgmDataUrl.value) {
+			const pgm = await this.loadPGM(this.pgmDataUrl.value)
 			const imgData = offCtx.createImageData(width, height)
+			console.log(
+				'pgm',
+				pgm.pixels.length,
+				pgm.pixels.length * 4,
+				'image',
+				imgData.data.length,
+			)
 			for (let i = 0; i < pgm.pixels.length; i++) {
 				const v = pgm.pixels[i]
 				imgData.data.set([v, v, v, 255], i * 4)
@@ -271,7 +317,7 @@ export class PathCanvas implements IPathCanvas {
 		const container = this.containerRef.value!
 		this.scale = Math.min(
 			container.clientWidth / width,
-			container.clientHeight / height,
+			(window.innerHeight - canvas.clientTop) / height,
 		)
 		const w = Math.round(width * this.scale)
 		const h = Math.round(height * this.scale)
@@ -304,9 +350,15 @@ export class PathCanvas implements IPathCanvas {
 	}
 
 	private async loadPGM(
-		file: File,
+		file: string,
 	): Promise<{ width: number; height: number; pixels: Uint8Array }> {
-		const buf = await file.arrayBuffer()
+		const [, b64] = file.split(',', 2)
+		const bin = atob(b64)
+		const bufArray = new Uint8Array(bin.length)
+		for (let i = 0; i < bin.length; i++) {
+			bufArray[i] = bin.charCodeAt(i)
+		}
+		const buf = bufArray.buffer
 		const view = new DataView(buf)
 		let offset = 0
 		const magic = String.fromCharCode(

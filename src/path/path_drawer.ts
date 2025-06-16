@@ -24,13 +24,25 @@ export class PathDrawer {
 	private snapRadius = 6
 
 	private sampled: SampledPathPreview | null = null
+	private savedState: null | SavedPath = null
 
 	constructor(private canvas: IPathCanvas) {
-		canvas.onLoadOrResize(() => {
+		canvas.onBeforeLoadOrResize(() => {
+			this.savedState = this.save()
+			return true
+		})
+		canvas.onAfterLoadOrResize(() => {
+			if (this.savedState) {
+				const state = this.savedState
+				this.savedState = null
+				this.load(state)
+			}
 			canvas.onPointerDown((p) => this.onPointerDown(p))
 			canvas.onPointerUp((p) => this.onPointerUp(p))
 			canvas.onPointerMove((p) => this.onPointerMove(p))
+			canvas.onPointerleave((p) => this.onPointerLeave(p))
 			setInterval(() => this.update(), 1000.0 / 60.0)
+			return true
 		})
 		// Handle undo with Ctrl+Z
 		canvas.getKeyManager().setOnKeyDownHandler('z', () => this.OnZDown())
@@ -95,6 +107,12 @@ export class PathDrawer {
 		this.mouseDown = false
 		// Stop dragging any point
 		this.selectedPointIndex = null
+	}
+
+	private onPointerLeave(_p: Point) {
+		this.onPointerUp(_p)
+		this.mouse = null
+		this.shouldUpdate = true
 	}
 
 	// helper: “anchor” points live at index 0, and then at odd indices ≥ 3
@@ -163,7 +181,6 @@ export class PathDrawer {
 	}
 
 	private draw() {
-		if (this.mouse == null) return
 		this.canvas.drawBackground()
 		const ctx = this.canvas.getContext()
 		if (!ctx) return
@@ -347,32 +364,43 @@ export class PathDrawer {
 		}
 
 		let mouse = this.mouse
-		ctx.strokeStyle = this.shiftDown ? 'green' : 'blue'
-		if (!this.shiftDown) {
-			const pt_idx = this.findNearbyPointIndex(this.mouse)
-			if (pt_idx !== null) {
-				mouse = this.points[pt_idx]
-				ctx.strokeStyle = 'red'
+		if (mouse) {
+			ctx.strokeStyle = this.shiftDown ? 'green' : 'blue'
+			if (!this.shiftDown) {
+				const pt_idx = this.findNearbyPointIndex(mouse)
+				if (pt_idx !== null) {
+					mouse = this.points[pt_idx]
+					ctx.strokeStyle = 'red'
+				}
 			}
-		}
 
-		// Draw cursor indicator
-		ctx.lineWidth = 2
-		ctx.beginPath()
-		ctx.arc(mouse.x, mouse.y, radius / 3, 0, Math.PI * 2)
-		ctx.stroke()
+			// Draw cursor indicator
+			ctx.lineWidth = 2
+			ctx.beginPath()
+			ctx.arc(mouse.x, mouse.y, radius / 3, 0, Math.PI * 2)
+			ctx.stroke()
+		}
 	}
 
 	public save(): SavedPath {
+		console.log('saving', this.points)
+		const points = this.points.map((p) => this.canvas.canvasToMap(p))
+		console.log('as', points)
 		return {
 			loopFinished: this.loopFinished,
-			points: this.points.map((p) => this.canvas.canvasToMap(p)),
+			points,
 		}
 	}
 
 	public load(p: SavedPath) {
+		if (this.savedState != null) {
+			this.savedState = p
+			return
+		}
 		this.loopFinished = p.loopFinished
 		this.points = p.points.map((p) => this.canvas.mapToCanvas(p))
+		console.log('from', p.points)
+		console.log('loaded', this.points)
 		this.shouldUpdate = true
 	}
 

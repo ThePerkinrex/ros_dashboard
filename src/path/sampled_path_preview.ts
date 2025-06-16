@@ -20,4 +20,8 @@ export class SampledPathPreview {
 			ctx.stroke()
 		}
 	}
+
+	public toJson(): Point[] {
+		return this.mapPoints
+	}
 }

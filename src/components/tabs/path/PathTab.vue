@@ -51,6 +51,20 @@ function savePath() {
 	const url = URL.createObjectURL(blob)
 	const link = document.createElement('a')
 	link.href = url
+	link.download = 'saved_path.json'
+	link.click()
+	URL.revokeObjectURL(url)
+}
+
+function saveSample() {
+	if (!sampled.value) return
+	const data = sampled.value.toJson()
+	const blob = new Blob([JSON.stringify(data, null, 2)], {
+		type: 'application/json',
+	})
+	const url = URL.createObjectURL(blob)
+	const link = document.createElement('a')
+	link.href = url
 	link.download = 'path.json'
 	link.click()
 	URL.revokeObjectURL(url)
@@ -133,7 +147,10 @@ onUnmounted(() => {
 				v-if="sampled !== null"
 				@click="((sampled = null), pathDrawer.hideSampled())"
 			>
-				Hide
+				Hide sample
+			</button>
+			<button v-if="sampled !== null" @click="saveSample()">
+				Save sample
 			</button>
 			<button @click="savePath">Save Path</button>
 			<button @click="clearPath">Clear Path</button>

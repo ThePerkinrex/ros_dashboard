@@ -18,7 +18,6 @@ import PathTab from './components/tabs/path/PathTab.vue'
 const ros = new Ros()
 
 const url = ref('ws://localhost:9090')
-ros.setURL(url.value)
 </script>
 
 <template>

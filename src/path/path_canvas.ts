@@ -146,26 +146,30 @@ export class PathCanvas implements IPathCanvas {
 	public canvasToMap(p: number): number
 	public canvasToMap(p: Point): Point
 	public canvasToMap(p: Point | number): Point | number {
-		if (typeof p === 'number') return this.scalarScaleCanvasToMap(p)
+		if (typeof p === 'number') {
+			return this.scalarScaleCanvasToMap(p)
+		}
+
+		// 1) get map‐pixel coords (0,0 is bottom‐left of the image in ROS maps)
+		const mapPx = p.x / this.scale
+		const mapPy = this.imgHeight - p.y / this.scale
+
+		// 2) turn those into world (map) coords using origin+resolution
 		return {
-			x:
-				(p.x / this.scale - this.imgWidth / 2 + this.origin.x) *
-				this.resolution,
-			y:
-				(p.y / this.scale - this.imgHeight / 2 + this.origin.y) *
-				this.resolution,
+			x: this.origin.x + mapPx * this.resolution,
+			y: this.origin.y + mapPy * this.resolution,
 		}
 	}
 
-	mapToCanvas(p: Point): Point {
-		console.log(this)
+	public mapToCanvas(p: Point): Point {
+		// 1) subtract origin and convert to map‐pixels
+		const mapPx = (p.x - this.origin.x) / this.resolution
+		const mapPy = (p.y - this.origin.y) / this.resolution
+
+		// 2) Y‐flip back into canvas coords, then scale
 		return {
-			x:
-				(p.x / this.resolution + this.imgWidth / 2 - this.origin.x) *
-				this.scale,
-			y:
-				(p.y / this.resolution + this.imgHeight / 2 - this.origin.y) *
-				this.scale,
+			x: mapPx * this.scale,
+			y: (this.imgHeight - mapPy) * this.scale,
 		}
 	}
 

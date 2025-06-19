@@ -1,9 +1,10 @@
 import type { Point } from './path_canvas'
+import type { SamplePoint } from './path_drawer'
 
 export class SampledPathPreview {
 	public constructor(
-		private canvasPoints: Point[],
-		private mapPoints: Point[],
+		private canvasPoints: SamplePoint[],
+		private mapPoints: SamplePoint[],
 	) {}
 
 	public draw(ctx: CanvasRenderingContext2D) {

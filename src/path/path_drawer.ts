@@ -1,11 +1,15 @@
 import { drawColoredBezier } from './bezier'
-import { CurvatureColoring } from './curvature_coloring'
+import { curvatureAt, CurvatureColoring } from './curvature_coloring'
 import type { IPathCanvas, Point } from './path_canvas'
 import { SampledPathPreview } from './sampled_path_preview'
 
 export interface SavedPath {
 	loopFinished: boolean
 	points: Point[]
+}
+
+export interface SamplePoint extends Point {
+	curvature: number
 }
 
 export class PathDrawer {
@@ -469,7 +473,7 @@ export class PathDrawer {
 		}
 
 		// helper to get point on cubic at t
-		const cubicPoint = (seg: Segment, t: number): Point => {
+		const cubicPoint = (seg: Segment, t: number): SamplePoint => {
 			const u = 1 - t
 			const w1 = u * u * u
 			const w2 = 3 * u * u * t
@@ -486,10 +490,11 @@ export class PathDrawer {
 					seg.p1.y * w2 +
 					seg.p2.y * w3 +
 					seg.p3.y * w4,
+				curvature: curvatureAt(t, seg.p0, seg.p1, seg.p2, seg.p3),
 			}
 		}
 
-		const samples: Point[] = []
+		const samples: SamplePoint[] = []
 		// sample each segment
 		for (const seg of segments) {
 			// approximate length by control polygon
@@ -507,7 +512,10 @@ export class PathDrawer {
 		// convert to map coordinates
 		this.sampled = new SampledPathPreview(
 			samples,
-			samples.map((p) => this.canvas.canvasToMap(p)),
+			samples.map((p) => ({
+				...this.canvas.canvasToMap(p),
+				curvature: this.canvas.canvasToMap(p.curvature),
+			})),
 		)
 		this.shouldUpdate = true
 		return this.sampled

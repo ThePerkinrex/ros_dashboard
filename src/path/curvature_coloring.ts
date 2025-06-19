@@ -39,7 +39,7 @@ function getSecondDeriv(
 }
 
 // Curvature κ = |x'y'' - y'x''| / (x'² + y'²)^(3/2)
-function curvatureAt(
+export function curvatureAt(
 	t: number,
 	p0: Point,
 	p1: Point,

@@ -54,7 +54,7 @@ export function curvatureAt(
 }
 
 // Map a value v ∈ [vmin, vmax] to a color via HSL
-function valueToColor(v: number, vmin: number, vmax: number): string {
+export function valueToColor(v: number, vmin: number, vmax: number): string {
 	const t = Math.max(0, Math.min(1, (v - vmin) / (vmax - vmin)))
 	const hue = 240 - 240 * t // 240° (blue) → 0° (red)
 	return `hsl(${hue}, 100%, 50%)`

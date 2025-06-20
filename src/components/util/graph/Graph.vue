@@ -11,6 +11,7 @@ import C2S from 'canvas2svg'
 import playIcon from '@/assets/icons/play.svg'
 import pauseIcon from '@/assets/icons/pause.svg'
 import { rgbToCSS, type RGB } from '@/util/color'
+import { valueToColor } from '@/path/curvature_coloring'
 
 export interface GraphPoint {
 	x: number
@@ -22,12 +23,18 @@ export interface RegularColor {
 	type: 'regular'
 }
 
+export interface RainbowColor {
+	max: number
+	min: number
+	type: 'rainbow'
+}
+
 export interface TransparentColor {
 	color: RGB
 	type: 'transparent'
 }
 
-export type Color = RegularColor | TransparentColor
+export type Color = RegularColor | TransparentColor | RainbowColor
 
 export interface GraphDataset {
 	color: Color
@@ -133,7 +140,13 @@ function getDatasetColoring(
 					a: (p.extra ?? {}).alpha ?? 1,
 				})
 			}
-			break
+		case 'rainbow':
+			return (p) => {
+				if (p.extra === undefined || p.extra.value === undefined)
+					throw new Error('point value should be defined')
+
+				return valueToColor(p.extra.value, color.min, color.max)
+			}
 
 		default:
 			break

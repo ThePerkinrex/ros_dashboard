@@ -228,17 +228,26 @@ function togglePath(t: RosTopic<'nav_msgs/msg/Path'>) {
 			subscription: t.subscribe((path) => {
 				if (datasets_const.paths[t.getName()] === undefined) {
 					datasets_const.paths[t.getName()] = {
-						color: { color: getColor(), type: 'regular' },
+						color: {
+							min: 1 / minCurv.value,
+							max: 1 / maxCurv.value,
+							type: 'rainbow',
+						},
 						data: [],
 						type: 'path',
 					}
+				}
+				datasets_const.paths[t.getName()]!.color = {
+					min: 1 / minCurv.value,
+					max: 1 / maxCurv.value,
+					type: 'rainbow',
 				}
 				// console.log(d)
 				datasets_const.paths[t.getName()]!.data = path.poses.map(
 					(p) => ({
 						x: p.pose.position.x,
 						y: p.pose.position.y,
-						speed: 1,
+						speed: p.pose.orientation.x,
 					}),
 				)
 
@@ -249,6 +258,8 @@ function togglePath(t: RosTopic<'nav_msgs/msg/Path'>) {
 }
 
 const timeout = ref<number>(20)
+const minCurv = ref<number>(3)
+const maxCurv = ref<number>(1)
 </script>
 
 <template>
@@ -264,6 +275,27 @@ const timeout = ref<number>(20)
 					v-model="timeout"
 				/>
 				<span>{{ timeout }} s</span>
+
+				<div>
+					<label for="min-curv"
+						>Curvature radius for minimum curv.</label
+					>
+					<input
+						type="number"
+						min="0"
+						id="min-curv"
+						v-model="minCurv"
+					/><br />
+					<label for="max-curv"
+						>Curvature radius for maximum curv.</label
+					>
+					<input
+						type="number"
+						min="0"
+						id="min-curv"
+						v-model="maxCurv"
+					/>
+				</div>
 			</div>
 
 			<details open>

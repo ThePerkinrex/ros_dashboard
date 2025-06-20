@@ -8,6 +8,7 @@ import Graph, {
 	type GraphDataset,
 	type GraphDatasets,
 	type GraphPoint,
+	type RainbowColor,
 	type RegularColor,
 	type Theme,
 	type TransparentColor,
@@ -35,7 +36,7 @@ export type TraceDataset = {
 export type PathDataset = {
 	type: 'path'
 	data: Array<{ x: number; y: number; speed: number }>
-	color: RegularColor
+	color: RegularColor | RainbowColor
 }
 
 type ExtendedMapDataset = MapDataset & GraphDataset
@@ -271,7 +272,7 @@ const update = (datasets: MapDatasets) => {
 					for (let i = this.data.length - 1; i >= 0; i--) {
 						const p = this.data[i]
 						const prepared: GraphPoint = preparedData.map(p)
-						yield prepared
+						yield { ...prepared, extra: { value: p.speed } }
 					}
 				},
 				isEmpty() {

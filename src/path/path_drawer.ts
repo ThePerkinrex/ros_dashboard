@@ -384,6 +384,39 @@ export class PathDrawer {
 			ctx.arc(mouse.x, mouse.y, radius / 3, 0, Math.PI * 2)
 			ctx.stroke()
 		}
+		this.drawMouseCoords(ctx)
+	}
+
+	private drawMouseCoords(ctx: CanvasRenderingContext2D) {
+		const mouse = this.mouse
+		if (!mouse) return
+
+		// convert to map-coords
+		const m = this.canvas.canvasToMap(mouse) as Point
+
+		const txt = `x: ${m.x.toFixed(2)}, y: ${m.y.toFixed(2)}`
+		const padding = 4
+		const fontSize = 12
+		ctx.save()
+		// reset any prior transforms
+		ctx.setTransform(1, 0, 0, 1, 0, 0)
+		ctx.font = `${fontSize}px sans-serif`
+
+		const canvasEl = ctx.canvas as HTMLCanvasElement
+		// measure text box
+		const metrics = ctx.measureText(txt)
+		const boxW = metrics.width + padding * 2
+		const boxH = fontSize + padding * 2
+
+		// draw background box
+		ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+		ctx.fillRect(0, canvasEl.height - boxH, boxW, boxH)
+
+		// draw white text
+		ctx.fillStyle = '#fff'
+		ctx.fillText(txt, padding, canvasEl.height - padding - 2)
+
+		ctx.restore()
 	}
 
 	public save(): SavedPath {

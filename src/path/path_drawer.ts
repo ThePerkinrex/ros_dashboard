@@ -547,7 +547,7 @@ export class PathDrawer {
 			samples,
 			samples.map((p) => ({
 				...this.canvas.canvasToMap(p),
-				curvature: this.canvas.canvasToMap(p.curvature),
+				curvature: 1 / this.canvas.canvasToMap(1 / p.curvature),
 			})),
 		)
 		this.shouldUpdate = true

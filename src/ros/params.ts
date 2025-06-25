@@ -178,7 +178,7 @@ export class RosParam<
 
 	public async getValue(
 		retries = 3,
-		timeout = 500,
+		timeout = 1000,
 	): Promise<RosParamValueMap[Type]> {
 		return getValue(
 			this.getType(),

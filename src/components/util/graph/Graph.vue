@@ -123,6 +123,9 @@ function getLegendColor(color: Color): string {
 			return rgbToCSS({ ...color.color, a: 255 })
 		case 'regular':
 			return rgbToCSS({ ...color.color, a: 255 })
+
+		case 'rainbow':
+			return rgbToCSS({ r: 255, g: 255, b: 255, a: 255 })
 		default:
 			break
 	}
@@ -151,7 +154,7 @@ function getDatasetColoring(
 		default:
 			break
 	}
-	throw new Error('Unexpected color type')
+	throw new Error('Unexpected color type: ' + JSON.stringify(color))
 }
 
 function paintGraph(

@@ -258,8 +258,8 @@ function togglePath(t: RosTopic<'nav_msgs/msg/Path'>) {
 }
 
 const timeout = ref<number>(20)
-const minCurv = ref<number>(3)
-const maxCurv = ref<number>(1)
+const minCurv = ref<number>(4)
+const maxCurv = ref<number>(1.2)
 </script>
 
 <template>
